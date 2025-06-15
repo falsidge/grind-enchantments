@@ -19,14 +19,14 @@
 
 package de.mschae23.grindenchantments.config;
 
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.codec.PacketCodecs;
 import de.mschae23.grindenchantments.cost.CostFunction;
 import de.mschae23.grindenchantments.cost.CountLevelsCostFunction;
 import de.mschae23.grindenchantments.cost.CountMinPowerCostFunction;
 import de.mschae23.grindenchantments.cost.FilterCostFunction;
 import de.mschae23.grindenchantments.cost.TransformCostFunction;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
@@ -43,10 +43,10 @@ public record DisenchantConfig(boolean enabled, boolean consumeItem, CostFunctio
     public static final DisenchantConfig DISABLED = new DisenchantConfig(false, false,
         new CountLevelsCostFunction(1.0, 1.0));
 
-    public static PacketCodec<PacketByteBuf, DisenchantConfig> createPacketCodec(PacketCodec<PacketByteBuf, CostFunction> costFunctionCodec) {
-        return PacketCodec.tuple(
-            PacketCodecs.BOOL, DisenchantConfig::enabled,
-            PacketCodecs.BOOL, DisenchantConfig::consumeItem,
+    public static StreamCodec<FriendlyByteBuf, DisenchantConfig> createPacketCodec(StreamCodec<FriendlyByteBuf, CostFunction> costFunctionCodec) {
+        return StreamCodec.composite(
+            ByteBufCodecs.BOOL, DisenchantConfig::enabled,
+            ByteBufCodecs.BOOL, DisenchantConfig::consumeItem,
             costFunctionCodec, DisenchantConfig::costFunction,
             DisenchantConfig::new
         );

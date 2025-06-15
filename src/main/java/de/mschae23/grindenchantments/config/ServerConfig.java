@@ -19,15 +19,15 @@
 
 package de.mschae23.grindenchantments.config;
 
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.registry.RegistryWrapper;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import de.mschae23.config.api.ModConfig;
 import de.mschae23.grindenchantments.GrindEnchantmentsMod;
 import de.mschae23.grindenchantments.cost.CostFunction;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
 
 public record ServerConfig(DisenchantConfig disenchant, MoveConfig move, ResetRepairCostConfig resetRepairCost,
                            FilterConfig filter,
@@ -40,9 +40,9 @@ public record ServerConfig(DisenchantConfig disenchant, MoveConfig move, ResetRe
         DedicatedServerConfig.CODEC.orElse(DedicatedServerConfig.DEFAULT).fieldOf("dedicated_server_options").forGetter(ServerConfig::dedicatedServerConfig)
         ).apply(instance, instance.stable(ServerConfig::new)));
 
-    public static final ModConfig.Type<ServerConfig, ServerConfig> TYPE = new ModConfig.Type<>(4, TYPE_CODEC);
+    public static final Type<ServerConfig, ServerConfig> TYPE = new Type<>(4, TYPE_CODEC);
     @SuppressWarnings("unchecked")
-    public static final ModConfig.Type<ServerConfig, ? extends ModConfig<ServerConfig>>[] VERSIONS = new ModConfig.Type[] { TYPE, };
+    public static final Type<ServerConfig, ? extends ModConfig<ServerConfig>>[] VERSIONS = new Type[] { TYPE, };
     public static final Codec<ModConfig<ServerConfig>> CODEC = ModConfig.createCodec(TYPE.version(), version ->
         GrindEnchantmentsMod.getConfigType(VERSIONS, version));
 
@@ -66,8 +66,8 @@ public record ServerConfig(DisenchantConfig disenchant, MoveConfig move, ResetRe
         return true;
     }
 
-    public static PacketCodec<PacketByteBuf, ServerConfig> createPacketCodec(PacketCodec<PacketByteBuf, CostFunction> costFunctionCodec) {
-        return PacketCodec.tuple(
+    public static StreamCodec<FriendlyByteBuf, ServerConfig> createPacketCodec(StreamCodec<FriendlyByteBuf, CostFunction> costFunctionCodec) {
+        return StreamCodec.composite(
             DisenchantConfig.createPacketCodec(costFunctionCodec), ServerConfig::disenchant,
             MoveConfig.createPacketCodec(costFunctionCodec), ServerConfig::move,
             ResetRepairCostConfig.createPacketCodec(costFunctionCodec), ServerConfig::resetRepairCost,
@@ -77,7 +77,7 @@ public record ServerConfig(DisenchantConfig disenchant, MoveConfig move, ResetRe
         );
     }
 
-    public void validateRegistryEntries(RegistryWrapper.WrapperLookup wrapperLookup) {
+    public void validateRegistryEntries(HolderLookup.Provider wrapperLookup) {
         this.filter.validateRegistryEntries(wrapperLookup);
         this.resetRepairCost.validateRegistryEntries(wrapperLookup);
     }

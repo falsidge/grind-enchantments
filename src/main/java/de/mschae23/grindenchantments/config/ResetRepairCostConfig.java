@@ -22,14 +22,14 @@ package de.mschae23.grindenchantments.config;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
-import net.minecraft.item.Item;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.codec.PacketCodecs;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -41,16 +41,16 @@ import de.mschae23.grindenchantments.cost.CountLevelsCostFunction;
 import de.mschae23.grindenchantments.cost.TransformCostFunction;
 import org.apache.logging.log4j.Level;
 
-public record ResetRepairCostConfig(boolean enabled, List<Identifier> catalystItems, boolean requiresEnchantment, CostFunction costFunction) {
+public record ResetRepairCostConfig(boolean enabled, List<ResourceLocation> catalystItems, boolean requiresEnchantment, CostFunction costFunction) {
     public static final Codec<ResetRepairCostConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
         Codec.BOOL.fieldOf("enabled").forGetter(ResetRepairCostConfig::enabled),
-        CodecUtils.listOrSingle(Identifier.CODEC).fieldOf("catalyst_items").forGetter(ResetRepairCostConfig::catalystItems),
+        CodecUtils.listOrSingle(ResourceLocation.CODEC).fieldOf("catalyst_items").forGetter(ResetRepairCostConfig::catalystItems),
         Codec.BOOL.fieldOf("requires_enchantment").forGetter(ResetRepairCostConfig::requiresEnchantment),
         CostFunction.CODEC.fieldOf("cost_function").forGetter(ResetRepairCostConfig::costFunction)
     ).apply(instance, instance.stable(ResetRepairCostConfig::new)));
 
     public static final ResetRepairCostConfig DEFAULT = new ResetRepairCostConfig(false,
-        List.of(Identifier.ofVanilla("diamond")), true,
+        List.of(ResourceLocation.withDefaultNamespace("diamond")), true,
         // Intentionally no filter function
         new TransformCostFunction(new AverageCountCostFunction(new CountLevelsCostFunction(1.0, 4.0)), 1.5, 4.0));
 
@@ -58,31 +58,31 @@ public record ResetRepairCostConfig(boolean enabled, List<Identifier> catalystIt
         List.of(), false,
         new CountLevelsCostFunction(1.0, 1.0));
 
-    public static PacketCodec<PacketByteBuf, ResetRepairCostConfig> createPacketCodec(PacketCodec<PacketByteBuf, CostFunction> costFunctionCodec) {
-        return PacketCodec.tuple(
-            PacketCodecs.BOOL, ResetRepairCostConfig::enabled,
-            Identifier.PACKET_CODEC.collect(PacketCodecs.toList()), ResetRepairCostConfig::catalystItems,
-            PacketCodecs.BOOL, ResetRepairCostConfig::requiresEnchantment,
+    public static StreamCodec<FriendlyByteBuf, ResetRepairCostConfig> createPacketCodec(StreamCodec<FriendlyByteBuf, CostFunction> costFunctionCodec) {
+        return StreamCodec.composite(
+            ByteBufCodecs.BOOL, ResetRepairCostConfig::enabled,
+            ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list()), ResetRepairCostConfig::catalystItems,
+            ByteBufCodecs.BOOL, ResetRepairCostConfig::requiresEnchantment,
             costFunctionCodec, ResetRepairCostConfig::costFunction,
             ResetRepairCostConfig::new
         );
     }
 
-    public void validateRegistryEntries(RegistryWrapper.WrapperLookup wrapperLookup) {
-        Optional<? extends RegistryWrapper.Impl<Item>> registryWrapperOpt = wrapperLookup.getOptionalWrapper(RegistryKeys.ITEM);
+    public void validateRegistryEntries(HolderLookup.Provider wrapperLookup) {
+        Optional<? extends HolderLookup.RegistryLookup<Item>> registryWrapperOpt = wrapperLookup.lookup(Registries.ITEM);
 
         if (registryWrapperOpt.isEmpty()) {
-            GrindEnchantmentsMod.log(Level.WARN, "Item registry is not present");
+            GrindEnchantmentsMod.LOGGER.warn("Item registry is not present");
             return;
         }
 
-        RegistryWrapper.Impl<Item> registryWrapper = registryWrapperOpt.get();
+        HolderLookup.RegistryLookup<Item> registryWrapper = registryWrapperOpt.get();
 
         this.catalystItems.stream()
-            .map(item -> Pair.of(item, registryWrapper.getOptional(RegistryKey.of(RegistryKeys.ITEM, item))))
+            .map(item -> Pair.of(item, registryWrapper.get(ResourceKey.create(Registries.ITEM, item))))
             .flatMap(result -> result.getSecond().isEmpty() ? Stream.of(result.getFirst()) : Stream.empty())
-            .map(Identifier::toString)
-            .forEach(item -> GrindEnchantmentsMod.log(Level.WARN, "Reset repair cost config contains unknown catalyst item: " + item));
+            .map(ResourceLocation::toString)
+            .forEach(item -> GrindEnchantmentsMod.LOGGER.warn( "Reset repair cost config contains unknown catalyst item: {}", item));
     }
 
     @Override

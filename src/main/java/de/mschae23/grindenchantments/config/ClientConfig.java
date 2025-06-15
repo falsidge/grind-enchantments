@@ -31,10 +31,10 @@ public record ClientConfig(boolean showLevelCost, ClientSyncConfig sync) impleme
         ClientSyncConfig.CODEC.fieldOf("sync_options").forGetter(ClientConfig::sync)
     ).apply(instance, instance.stable(ClientConfig::new)));
 
-    public static final ModConfig.Type<ClientConfig, ClientConfig> TYPE = new ModConfig.Type<>(4, TYPE_CODEC);
+    public static final Type<ClientConfig, ClientConfig> TYPE = new Type<>(4, TYPE_CODEC);
     public static final ClientConfig DEFAULT = new ClientConfig(true, ClientSyncConfig.DEFAULT);
     @SuppressWarnings("unchecked")
-    public static final ModConfig.Type<ClientConfig, ? extends ModConfig<ClientConfig>>[] VERSIONS = new ModConfig.Type[] { TYPE, };
+    public static final Type<ClientConfig, ? extends ModConfig<ClientConfig>>[] VERSIONS = new Type[] { TYPE, };
 
     public static final Codec<ModConfig<ClientConfig>> CODEC = ModConfig.createCodec(TYPE.version(), version ->
         GrindEnchantmentsMod.getConfigType(VERSIONS, version));

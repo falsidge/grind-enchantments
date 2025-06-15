@@ -19,16 +19,16 @@
 
 package de.mschae23.grindenchantments.cost;
 
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.codec.PacketCodecs;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.registry.tag.EnchantmentTags;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import de.mschae23.grindenchantments.config.FilterConfig;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.tags.EnchantmentTags;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 public record CountLevelsCostFunction(double normalFactor, double treasureFactor) implements CostFunction {
     public static final MapCodec<CountLevelsCostFunction> TYPE_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -38,19 +38,19 @@ public record CountLevelsCostFunction(double normalFactor, double treasureFactor
     public static final CostFunctionType<CountLevelsCostFunction> TYPE = new CostFunctionType.Impl<>(TYPE_CODEC, CountLevelsCostFunction::packetCodec);
 
     @Override
-    public double getCost(ItemEnchantmentsComponent enchantments, FilterConfig filter, RegistryWrapper.WrapperLookup wrapperLookup) {
-        return enchantments.getEnchantmentEntries().stream()
-            .mapToDouble(entry -> (double) entry.getIntValue() * (entry.getKey().isIn(EnchantmentTags.TREASURE) ? this.treasureFactor : this.normalFactor))
+    public double getCost(ItemEnchantments enchantments, FilterConfig filter, HolderLookup.Provider wrapperLookup) {
+        return enchantments.entrySet().stream()
+            .mapToDouble(entry -> (double) entry.getIntValue() * (entry.getKey().is(EnchantmentTags.TREASURE) ? this.treasureFactor : this.normalFactor))
             .sum();
     }
 
     @Override
     public CostFunctionType<?> getType() {
-        return CostFunctionType.COUNT_LEVELS;
+        return CostFunctionType.COUNT_LEVELS.get();
     }
 
-    public static PacketCodec<PacketByteBuf, CountLevelsCostFunction> packetCodec(PacketCodec<PacketByteBuf, CostFunction> delegateCodec) {
-        return PacketCodec.tuple(PacketCodecs.DOUBLE, CountLevelsCostFunction::normalFactor, PacketCodecs.DOUBLE, CountLevelsCostFunction::treasureFactor, CountLevelsCostFunction::new);
+    public static StreamCodec<FriendlyByteBuf, CountLevelsCostFunction> packetCodec(StreamCodec<FriendlyByteBuf, CostFunction> delegateCodec) {
+        return StreamCodec.composite(ByteBufCodecs.DOUBLE, CountLevelsCostFunction::normalFactor, ByteBufCodecs.DOUBLE, CountLevelsCostFunction::treasureFactor, CountLevelsCostFunction::new);
     }
 
     @Override

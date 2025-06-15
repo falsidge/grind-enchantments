@@ -1,130 +1,141 @@
-/*
- * Copyright (C) 2024  mschae23
- *
- * This file is part of Grind enchantments.
- *
- * Grind enchantments is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 package de.mschae23.grindenchantments;
 
-import java.io.BufferedOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.util.Optional;
-import java.util.stream.Stream;
-import net.minecraft.registry.RegistryOps;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.util.Identifier;
-import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
-import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
-import net.fabricmc.fabric.api.networking.v1.ServerConfigurationNetworking;
-import net.fabricmc.loader.api.FabricLoader;
-import com.google.gson.JsonElement;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.JsonOps;
 import de.mschae23.config.api.ConfigIo;
-import de.mschae23.config.api.ModConfig;
 import de.mschae23.config.api.exception.ConfigException;
 import de.mschae23.grindenchantments.config.ClientConfig;
 import de.mschae23.grindenchantments.config.ServerConfig;
-import de.mschae23.grindenchantments.config.legacy.v1.GrindEnchantmentsConfigV1;
-import de.mschae23.grindenchantments.config.legacy.v2.GrindEnchantmentsConfigV2;
-import de.mschae23.grindenchantments.config.legacy.v3.GrindEnchantmentsConfigV3;
 import de.mschae23.grindenchantments.config.sync.ServerConfigS2CPayload;
 import de.mschae23.grindenchantments.cost.CostFunction;
 import de.mschae23.grindenchantments.cost.CostFunctionType;
-import de.mschae23.grindenchantments.event.ApplyLevelCostEvent;
-import de.mschae23.grindenchantments.event.GrindstoneEvents;
-import de.mschae23.grindenchantments.impl.DisenchantOperation;
-import de.mschae23.grindenchantments.impl.MoveOperation;
-import de.mschae23.grindenchantments.impl.ResetRepairCostOperation;
 import de.mschae23.grindenchantments.registry.GrindEnchantmentsRegistries;
-import io.github.fourmisain.taxfreelevels.TaxFreeLevels;
+import net.minecraft.core.HolderLookup;
+import com.mojang.serialization.DynamicOps;
+import net.minecraft.resources.RegistryOps;
+import net.minecraft.resources.ResourceLocation;
+import net.neoforged.fml.loading.FMLPaths;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.neoforge.network.event.RegisterConfigurationTasksEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import net.neoforged.neoforge.registries.NewRegistryEvent;
+import net.neoforged.neoforge.registries.RegisterEvent;
 import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
 
-public class GrindEnchantmentsMod implements ModInitializer {
+import com.mojang.logging.LogUtils;
+
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.common.Mod;
+import de.mschae23.config.api.ModConfig;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import com.google.gson.JsonElement;
+
+
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+
+import static de.mschae23.grindenchantments.GrindEnchantmentsClient.CLIENT_CONFIG;
+import static de.mschae23.grindenchantments.registry.GrindEnchantmentsRegistries.COST_FUNCTIONS;
+import static de.mschae23.grindenchantments.registry.GrindEnchantmentsRegistries.COST_FUNCTION_KEY;
+
+// The value here should match an entry in the META-INF/neoforge.mods.toml file
+@Mod(GrindEnchantmentsMod.MODID)
+public class GrindEnchantmentsMod
+{
+    // Define mod id in a common place for everything to reference
     public static final String MODID = "grindenchantments";
-    public static final Logger LOGGER = LogManager.getLogger("Grind Enchantments");
+    // Directly reference a slf4j logger
+    public static final Logger LOGGER = LogUtils.getLogger();
 
     @Nullable
     static ServerConfig SERVER_CONFIG = null;
     static ServerConfig LOCAL_SERVER_CONFIG = ServerConfig.DEFAULT;
-
-    @Override
-    public void onInitialize() {
+    // Of course, all mentions of spells can and should be replaced with whatever your registry actually is.
+    // The constructor for the mod class is the first code that is run when your mod is loaded.
+    // FML will recognize some parameter types like IEventBus or ModContainer and pass them in automatically.
+    public GrindEnchantmentsMod(IEventBus modEventBus, ModContainer modContainer)
+    {
         GrindEnchantmentsRegistries.init();
         CostFunctionType.init();
+        // Register the commonSetup method for modloading
+        modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(this::registerRegistries);
 
-        convertLegacyConfig();
+        COST_FUNCTIONS.register(modEventBus);
 
-        // Singleplayer or on server
-        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
-            SERVER_CONFIG = initializeServerConfig(server.getRegistryManager());
-            SERVER_CONFIG.validateRegistryEntries(server.getRegistryManager());
-            LOCAL_SERVER_CONFIG = SERVER_CONFIG;
-        });
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> SERVER_CONFIG = null);
+        // Register ourselves for server and other game events we are interested in.
+        // Note that this is necessary if and only if we want *this* class (ExampleMod) to respond directly to events.
+        // Do not add this line if there are no @SubscribeEvent-annotated functions in this class, like onServerStarting() below.
+        NeoForge.EVENT_BUS.register(this);
 
-        // Multiplayer
-        PayloadTypeRegistry.configurationS2C().register(ServerConfigS2CPayload.ID,
-            ServerConfigS2CPayload.createPacketCodec(CostFunction.createPacketCodec()));
-
-        ServerConfigurationConnectionEvents.CONFIGURE.register((handler, server) -> {
-            if (ServerConfigurationNetworking.canSend(handler, ServerConfigS2CPayload.ID)) {
-                ServerConfigurationNetworking.send(handler, new ServerConfigS2CPayload(SERVER_CONFIG != null ? SERVER_CONFIG : LOCAL_SERVER_CONFIG));
-            }
-        });
-
-        DisenchantOperation disenchant = new DisenchantOperation();
-        MoveOperation move = new MoveOperation();
-        ResetRepairCostOperation resetRepairCost = new ResetRepairCostOperation();
-
-        GrindstoneEvents.registerAll(disenchant);
-        GrindstoneEvents.registerAll(move);
-        GrindstoneEvents.registerAll(resetRepairCost);
-
-        ApplyLevelCostEvent.EVENT.register(ApplyLevelCostEvent.DEFAULT, (cost, player) -> {
-            player.addExperienceLevels(-cost);
-            return true;
-        });
-
-        // Mod compatibility with Tax Free Levels
-        if (FabricLoader.getInstance().isModLoaded("taxfreelevels")) {
-            ApplyLevelCostEvent.EVENT.register(ApplyLevelCostEvent.MOD_COMPATIBILITY, (cost, player) -> {
-                TaxFreeLevels.applyFlattenedXpCost(player, cost);
-                return true;
-            });
-        }
+        // Register our mod's ModConfigSpec so that FML can create and load the config file for us
     }
 
+    void registerRegistries(NewRegistryEvent event) {
+        GrindEnchantmentsRegistries.registerRegistries(event);
+    }
+    private void commonSetup(final FMLCommonSetupEvent event)
+    {
+    }
+
+    // You can use SubscribeEvent and let the Event Bus discover methods to call
+    @SubscribeEvent
+    public void onServerStarting(ServerStartingEvent event)
+    {
+        SERVER_CONFIG = initializeServerConfig(event.getServer().registryAccess());
+        SERVER_CONFIG.validateRegistryEntries(event.getServer().registryAccess());
+        LOCAL_SERVER_CONFIG = SERVER_CONFIG;
+    }
+    @SubscribeEvent
+    public void onServerStarting(ServerStoppingEvent event)
+    {
+        SERVER_CONFIG = null;
+    }
+
+
+
+    @EventBusSubscriber(modid = MODID, bus = EventBusSubscriber.Bus.MOD)
+    public static class CommonModEvents {
+        @SubscribeEvent
+        public static void registerPayloads(final RegisterPayloadHandlersEvent event){
+            final PayloadRegistrar registrar = event.registrar("1");
+            registrar.configurationToClient(
+                    ServerConfigS2CPayload.ID,
+                    ServerConfigS2CPayload.createPacketCodec(CostFunction.createPacketCodec()),
+                    (payload, context)-> {
+
+                        GrindEnchantmentsMod.SERVER_CONFIG = payload.config();
+
+                        if (GrindEnchantmentsClient.CLIENT_CONFIG.sync().logReceivedConfig()) {
+                            LOGGER.info("Received server config: {}", GrindEnchantmentsMod.SERVER_CONFIG);
+                        }
+                    }
+                    );
+        }
+        @SubscribeEvent
+        public static void register(final RegisterConfigurationTasksEvent event) {
+            if (event.getListener().hasChannel(ServerConfigS2CPayload.ID))
+            {
+                event.getListener().send(new ServerConfigS2CPayload(SERVER_CONFIG != null ? SERVER_CONFIG : LOCAL_SERVER_CONFIG));
+            }
+        }
+    }
     public static ServerConfig getServerConfig() {
         return SERVER_CONFIG == null ?
-            GrindEnchantmentsClient.getClientConfig().sync().useLocalIfUnsynced() ? LOCAL_SERVER_CONFIG : ServerConfig.DISABLED
-            : SERVER_CONFIG;
+                GrindEnchantmentsClient.getClientConfig().sync().useLocalIfUnsynced() ? LOCAL_SERVER_CONFIG : ServerConfig.DISABLED
+                : SERVER_CONFIG;
     }
 
     public static ClientConfig getClientConfig() {
@@ -146,12 +157,12 @@ public class GrindEnchantmentsMod implements ModInitializer {
     private static <C extends ModConfig<C>> C initializeGenericConfig(Path configName, C latestDefault, Codec<ModConfig<C>> codec,
                                                                       DynamicOps<JsonElement> ops, String kind) {
         // modified version of ConfigIoImpl.initializeConfig from codec-config-api
-        Path filePath = FabricLoader.getInstance().getConfigDir().resolve(MODID).resolve(configName);
+        Path filePath = FMLPaths.CONFIGDIR.get().resolve(configName);
         C latestConfig = latestDefault;
 
         if (Files.exists(filePath) && Files.isRegularFile(filePath)) {
             try (InputStream input = Files.newInputStream(filePath)) {
-                log(Level.INFO, "Reading " + kind + " config.");
+                LOGGER.info("Reading {} config.",kind);
 
                 ModConfig<C> config = ConfigIo.decodeConfig(input, codec, ops);
                 latestConfig = config.latest();
@@ -160,19 +171,19 @@ public class GrindEnchantmentsMod implements ModInitializer {
                     // Default OpenOptions are CREATE, TRUNCATE_EXISTING, and WRITE
                     try (OutputStream output = Files.newOutputStream(filePath);
                          OutputStreamWriter writer = new OutputStreamWriter(new BufferedOutputStream(output))) {
-                        log(Level.INFO, "Writing updated " + kind + " config.");
+                        LOGGER.info("Writing updated {} config.", kind);
 
                         ConfigIo.encodeConfig(writer, codec, config.latest(), ops);
                     } catch (IOException e) {
-                        log(Level.ERROR, "IO exception while trying to write updated " + kind + " config: " + e.getLocalizedMessage());
+                        LOGGER.error("IO exception while trying to write updated {} config: {}",  kind, e.getLocalizedMessage());
                     } catch (ConfigException e) {
-                        log(Level.ERROR, e.getLocalizedMessage());
+                        LOGGER.error(e.getLocalizedMessage());
                     }
                 }
             } catch (IOException e) {
-                log(Level.ERROR, "IO exception while trying to read " + kind + " config: " + e.getLocalizedMessage());
+                LOGGER.error("IO exception while trying to read {} config: {}",  kind, e.getLocalizedMessage());
             } catch (ConfigException e) {
-                log(Level.ERROR, e.getLocalizedMessage());
+                LOGGER.error(e.getLocalizedMessage());
             }
         } else {
             try {
@@ -181,120 +192,31 @@ public class GrindEnchantmentsMod implements ModInitializer {
                 // Write default config if the file doesn't exist
                 try (OutputStream output = Files.newOutputStream(filePath, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
                      OutputStreamWriter writer = new OutputStreamWriter(new BufferedOutputStream(output))) {
-                    log(Level.INFO, "Writing default " + kind + " config.");
+                    LOGGER.info( "Writing default {} config.", kind);
+
 
                     ConfigIo.encodeConfig(writer, codec, latestDefault, ops);
                 }
             } catch (IOException e) {
-                log(Level.ERROR, "IO exception while trying to write " + kind + " config: " + e.getLocalizedMessage());
+                LOGGER.error("IO exception while trying to write {} config: {}", kind, e.getLocalizedMessage());
             } catch (ConfigException e) {
-                log(Level.ERROR, e.getLocalizedMessage());
+                LOGGER.error(e.getLocalizedMessage());
             }
         }
-
         return latestConfig;
     }
 
     public static ClientConfig initializeClientConfig() {
-        return initializeGenericConfig(Path.of("client.json"), ClientConfig.DEFAULT, ClientConfig.CODEC,
-            JsonOps.INSTANCE, "client");
+        return initializeGenericConfig(Path.of(MODID+"-client.json"), ClientConfig.DEFAULT, ClientConfig.CODEC,
+                JsonOps.INSTANCE, "client");
     }
 
-    public static ServerConfig initializeServerConfig(RegistryWrapper.WrapperLookup wrapperLookup) {
-        return initializeGenericConfig(Path.of("server.json"), ServerConfig.DEFAULT, ServerConfig.CODEC,
-            RegistryOps.of(JsonOps.INSTANCE, wrapperLookup), "server");
+    public static ServerConfig initializeServerConfig(HolderLookup.Provider wrapperLookup) {
+        return initializeGenericConfig(Path.of(MODID+"-server.json"), ServerConfig.DEFAULT, ServerConfig.CODEC,
+                RegistryOps.create(JsonOps.INSTANCE, wrapperLookup), "server");
     }
 
-    @SuppressWarnings("deprecation")
-    private static void convertLegacyConfig() {
-        final Path newConfigDirPath = FabricLoader.getInstance().getConfigDir().resolve(MODID);
-
-        if (!Files.isDirectory(newConfigDirPath)) {
-            RegistryWrapper.WrapperLookup wrapperLookup = RegistryWrapper.WrapperLookup.of(Stream.of(
-                GrindEnchantmentsRegistries.COST_FUNCTION.getReadOnlyWrapper()));
-            Optional<GrindEnchantmentsConfigV3> legacyConfigOpt = readLegacyConfig(wrapperLookup);
-
-            if (legacyConfigOpt.isPresent()) {
-                GrindEnchantmentsConfigV3 legacyConfig = legacyConfigOpt.get();
-                ServerConfig serverConfig = legacyConfig.toServerConfig();
-                ClientConfig clientConfig = legacyConfig.toClientConfig();
-
-                try {
-                    final Path serverConfigPath = newConfigDirPath.resolve("server.json");
-                    final Path clientConfigPath = newConfigDirPath.resolve("client.json");
-
-                    Files.createDirectories(newConfigDirPath);
-                    boolean success = true;
-
-                    try (OutputStream outputStream = Files.newOutputStream(serverConfigPath);
-                         OutputStreamWriter writer = new OutputStreamWriter(new BufferedOutputStream(outputStream))) {
-                        log(Level.INFO, "Writing converted server config.");
-
-                        ConfigIo.encodeConfig(writer, ServerConfig.CODEC, serverConfig, RegistryOps.of(JsonOps.INSTANCE, wrapperLookup));
-                    } catch (ConfigException e) {
-                        log(Level.ERROR, e.getLocalizedMessage());
-                        success = false;
-                    }
-
-                    try (OutputStream outputStream = Files.newOutputStream(clientConfigPath);
-                         OutputStreamWriter writer = new OutputStreamWriter(new BufferedOutputStream(outputStream))) {
-                        log(Level.INFO, "Writing converted client config.");
-
-                        ConfigIo.encodeConfig(writer, ClientConfig.CODEC, clientConfig, RegistryOps.of(JsonOps.INSTANCE, wrapperLookup));
-                    } catch (ConfigException e) {
-                        log(Level.ERROR, e.getLocalizedMessage());
-                        success = false;
-                    }
-
-                    if (success) {
-                        Path configDir = FabricLoader.getInstance().getConfigDir();
-                        // Move to grindenchantments.json.old if conversion succeeds
-                        Files.move(configDir.resolve(MODID + ".json"), configDir.resolve(MODID + ".json.old"));
-                    }
-                } catch (IOException e) {
-                    log(Level.ERROR, "IO exception while trying to convert legacy config: " + e.getLocalizedMessage());
-                }
-            }
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    private static Optional<GrindEnchantmentsConfigV3> readLegacyConfig(RegistryWrapper.WrapperLookup wrapperLookup) {
-        final GrindEnchantmentsConfigV3 legacyLatestConfigDefault = GrindEnchantmentsConfigV3.DEFAULT;
-        final int legacyLatestConfigVersion = legacyLatestConfigDefault.version();
-        @SuppressWarnings({"unchecked", "deprecation"})
-        final ModConfig.Type<GrindEnchantmentsConfigV3, ? extends ModConfig<GrindEnchantmentsConfigV3>>[] legacyConfigCodecs = new ModConfig.Type[] {
-            GrindEnchantmentsConfigV1.TYPE, GrindEnchantmentsConfigV2.TYPE, GrindEnchantmentsConfigV3.TYPE
-        };
-
-        final Codec<ModConfig<GrindEnchantmentsConfigV3>> legacyConfigCodec = ModConfig.createCodec(legacyLatestConfigVersion, version ->
-            getConfigType(legacyConfigCodecs, version));
-
-        Path configPath = FabricLoader.getInstance().getConfigDir().resolve(Paths.get(MODID + ".json"));
-        @Nullable
-        GrindEnchantmentsConfigV3 config = null;
-
-        if (Files.exists(configPath) && Files.isRegularFile(configPath)) {
-            try (InputStream input = Files.newInputStream(configPath)) {
-                log(Level.INFO, "Reading legacy config.");
-
-                ModConfig<GrindEnchantmentsConfigV3> readConfig = ConfigIo.decodeConfig(input, legacyConfigCodec, RegistryOps.of(JsonOps.INSTANCE, wrapperLookup));
-                config = readConfig.latest();
-            } catch (IOException e) {
-                log(Level.ERROR, "IO exception while trying to read config: " + e.getLocalizedMessage());
-            } catch (ConfigException e) {
-                log(Level.ERROR, e.getLocalizedMessage());
-            }
-        }
-
-        return Optional.ofNullable(config);
-    }
-
-    public static void log(Level level, Object message) {
-        LOGGER.log(level, "[Grind Enchantments] {}", message);
-    }
-
-    public static Identifier id(String path) {
-        return Identifier.of(MODID, path);
+    public static ResourceLocation id(String path) {
+        return ResourceLocation.fromNamespaceAndPath(MODID, path);
     }
 }

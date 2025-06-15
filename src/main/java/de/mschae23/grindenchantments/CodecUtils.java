@@ -19,9 +19,10 @@
 
 package de.mschae23.grindenchantments;
 
-import java.util.List;
 import com.mojang.datafixers.util.Either;
 import com.mojang.serialization.Codec;
+
+import java.util.List;
 
 public final class CodecUtils {
     private CodecUtils() {

@@ -20,34 +20,34 @@
 package de.mschae23.grindenchantments.impl;
 
 import java.util.function.IntSupplier;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.RegistryWrapper;
+
 import de.mschae23.grindenchantments.GrindEnchantments;
+import de.mschae23.grindenchantments.event.GrindstoneEvents;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import de.mschae23.grindenchantments.GrindEnchantmentsMod;
 import de.mschae23.grindenchantments.config.FilterAction;
 import de.mschae23.grindenchantments.config.FilterConfig;
 import de.mschae23.grindenchantments.config.ResetRepairCostConfig;
 import de.mschae23.grindenchantments.config.ServerConfig;
-import de.mschae23.grindenchantments.event.ApplyLevelCostEvent;
-import de.mschae23.grindenchantments.event.GrindstoneEvents;
 import org.jetbrains.annotations.NotNull;
 
-public class ResetRepairCostOperation implements GrindstoneEvents.CanInsert, GrindstoneEvents.UpdateResult, GrindstoneEvents.CanTakeResult, GrindstoneEvents.TakeResult, GrindstoneEvents.LevelCost {
+public class ResetRepairCostOperation implements Operation{
     @Override
     public boolean canInsert(ItemStack stack, ItemStack other, int slotId) {
         ResetRepairCostConfig config = GrindEnchantmentsMod.getServerConfig().resetRepairCost();
 
-        return config.enabled() && slotId == 1 && stack.getRegistryEntry().getKey().map(key -> config.catalystItems().contains(key.getValue())).orElse(false);
+        return config.enabled() && slotId == 1 && stack.getItemHolder().unwrapKey().map(key -> config.catalystItems().contains(key.location())).orElse(false);
     }
 
     @Override
-    public @NotNull ItemStack onUpdateResult(ItemStack input1, ItemStack input2, PlayerEntity player, RegistryWrapper.WrapperLookup wrapperLookup) {
-        if (!isResetRepairCostOperation(input1, input2)) {
+    public @NotNull ItemStack onUpdateResult(ItemStack input1, ItemStack input2, Player player, HolderLookup.Provider wrapperLookup) {
+        if (!isOperation(input1, input2)) {
             return ItemStack.EMPTY;
         }
 
@@ -55,25 +55,25 @@ public class ResetRepairCostOperation implements GrindstoneEvents.CanInsert, Gri
         FilterConfig filter = config.filter();
 
         if (filter.enabled() && filter.item().action() != FilterAction.IGNORE
-            && (filter.item().action() == FilterAction.DENY) == input1.getRegistryEntry().getKey().map(key -> filter.item().items().contains(key.getValue())).orElse(false)) {
+            && (filter.item().action() == FilterAction.DENY) == input1.getItemHolder().unwrapKey().map(key -> filter.item().items().contains(key.location())).orElse(false)) {
             return ItemStack.EMPTY;
         }
 
-        if (input1.getOrDefault(DataComponentTypes.REPAIR_COST, 0) <= 0) {
+        if (input1.getOrDefault(DataComponents.REPAIR_COST, 0) <= 0) {
             return ItemStack.EMPTY;
-        } else if (config.resetRepairCost().requiresEnchantment() && !EnchantmentHelper.hasEnchantments(input1)) {
+        } else if (config.resetRepairCost().requiresEnchantment() && !EnchantmentHelper.hasAnyEnchantments(input1)) {
             return ItemStack.EMPTY;
         }
 
         ItemStack result = input1.copy();
-        result.remove(DataComponentTypes.REPAIR_COST);
+        result.remove(DataComponents.REPAIR_COST);
 
         return result;
     }
 
     @Override
-    public boolean canTakeResult(ItemStack input1, ItemStack input2, PlayerEntity player, RegistryWrapper.WrapperLookup wrapperLookup) {
-        if (isResetRepairCostOperation(input1, input2)) {
+    public boolean canTakeResult(ItemStack input1, ItemStack input2, Player player, HolderLookup.Provider wrapperLookup) {
+        if (isOperation(input1, input2)) {
             ServerConfig config = GrindEnchantmentsMod.getServerConfig();
 
             return canTakeResult(input1, input2, () ->
@@ -84,35 +84,34 @@ public class ResetRepairCostOperation implements GrindstoneEvents.CanInsert, Gri
     }
 
     @Override
-    public boolean onTakeResult(ItemStack input1, ItemStack input2, ItemStack resultStack, PlayerEntity player, Inventory input, RegistryWrapper.WrapperLookup wrapperLookup) {
-        if (!isResetRepairCostOperation(input1, input2)) {
+    public boolean onTakeResult(ItemStack input1, ItemStack input2, ItemStack resultStack, Player player, Container input, HolderLookup.Provider wrapperLookup) {
+        if (!isOperation(input1, input2)) {
             return false;
         }
 
         ServerConfig config = GrindEnchantmentsMod.getServerConfig();
         FilterConfig filter = config.filter();
 
-        input.setStack(0, ItemStack.EMPTY);
+        input.setItem(0, ItemStack.EMPTY);
 
         if (input2.getCount() == 1)
-            input.setStack(1, ItemStack.EMPTY);
+            input.setItem(1, ItemStack.EMPTY);
         else {
             ItemStack newCatalystStack = input2.copy();
             newCatalystStack.setCount(input2.getCount() - 1);
-            input.setStack(1, newCatalystStack);
+            input.setItem(1, newCatalystStack);
         }
 
-        if (!player.getAbilities().creativeMode) {
+        if (!player.getAbilities().instabuild) {
             int cost = GrindEnchantments.getLevelCost(input1, config.resetRepairCost().costFunction(), filter, wrapperLookup);
-            ApplyLevelCostEvent.EVENT.invoker().applyLevelCost(cost, player);
+            GrindstoneEvents.applyLevelCost(cost, player);
         }
-
         return true;
     }
 
     @Override
-    public int getLevelCost(ItemStack input1, ItemStack input2, PlayerEntity player, RegistryWrapper.WrapperLookup wrapperLookup) {
-        if (isResetRepairCostOperation(input1, input2)) {
+    public int getLevelCost(ItemStack input1, ItemStack input2, Player player, HolderLookup.Provider wrapperLookup) {
+        if (isOperation(input1, input2)) {
             ServerConfig config = GrindEnchantmentsMod.getServerConfig();
 
             return GrindEnchantments.getLevelCost(input1, config.resetRepairCost().costFunction(), config.filter(), wrapperLookup);
@@ -121,19 +120,19 @@ public class ResetRepairCostOperation implements GrindstoneEvents.CanInsert, Gri
         return -1;
     }
 
-    public static boolean isResetRepairCostOperation(ItemStack input1, ItemStack input2) {
+    public boolean isOperation(ItemStack input1, ItemStack input2) {
         ResetRepairCostConfig config = GrindEnchantmentsMod.getServerConfig().resetRepairCost();
 
         if (!config.enabled())
             return false;
 
-        return (input1.isDamageable() || EnchantmentHelper.canHaveEnchantments(input1))
-            && !input2.isOf(Items.BOOK) && !input2.isOf(Items.ENCHANTED_BOOK) && !input2.isDamageable() && !input2.isOf(input1.getItem())
-            && input2.getRegistryEntry().getKey().map(key -> config.catalystItems().contains(key.getValue())).orElse(false);
+        return (input1.isDamageableItem() || EnchantmentHelper.canStoreEnchantments(input1))
+            && !input2.is(Items.BOOK) && !input2.is(Items.ENCHANTED_BOOK) && !input2.isDamageableItem() && !input2.is(input1.getItem())
+            && input2.getItemHolder().unwrapKey().map(key -> config.catalystItems().contains(key.location())).orElse(false);
     }
 
     public static boolean canTakeResult(@SuppressWarnings("unused") ItemStack input1, @SuppressWarnings("unused") ItemStack input2,
-                                        IntSupplier cost, PlayerEntity player) {
-        return player.getAbilities().creativeMode || player.experienceLevel >= cost.getAsInt();
+                                        IntSupplier cost, Player player) {
+        return player.getAbilities().instabuild || player.experienceLevel >= cost.getAsInt();
     }
 }

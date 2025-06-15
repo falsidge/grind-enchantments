@@ -19,21 +19,21 @@
 
 package de.mschae23.grindenchantments.config;
 
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.codec.PacketCodecs;
-import net.minecraft.util.StringIdentifiable;
 import com.mojang.serialization.Codec;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.util.StringRepresentable;
 
-public enum FilterAction implements StringIdentifiable {
+public enum FilterAction implements StringRepresentable {
     ALLOW("allow"),
     IGNORE("ignore"),
     DENY("deny");
 
-    public static final Codec<FilterAction> CODEC = StringIdentifiable.createCodec(FilterAction::values);
-    public static final Codec<FilterAction> NON_IGNORE_CODEC = StringIdentifiable.createCodec(() -> new FilterAction[] { ALLOW, DENY, });
+    public static final Codec<FilterAction> CODEC = StringRepresentable.fromEnum(FilterAction::values);
+    public static final Codec<FilterAction> NON_IGNORE_CODEC = StringRepresentable.fromEnum(() -> new FilterAction[] { ALLOW, DENY, });
 
-    public static final PacketCodec<PacketByteBuf, FilterAction> PACKET_CODEC = PacketCodecs.indexed(i -> values()[i], FilterAction::ordinal).cast();
+    public static final StreamCodec<FriendlyByteBuf, FilterAction> PACKET_CODEC = ByteBufCodecs.idMapper(i -> values()[i], FilterAction::ordinal).cast();
 
     private final String name;
 
@@ -42,7 +42,7 @@ public enum FilterAction implements StringIdentifiable {
     }
 
     @Override
-    public String asString() {
+    public String getSerializedName() {
         return this.name;
     }
 }

@@ -20,36 +20,49 @@
 package de.mschae23.grindenchantments.cost;
 
 import java.util.function.Function;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
+import java.util.function.Supplier;
+
+import net.minecraft.core.Registry;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.resources.ResourceKey;
 import com.mojang.serialization.MapCodec;
 import de.mschae23.grindenchantments.GrindEnchantmentsMod;
 import de.mschae23.grindenchantments.registry.GrindEnchantmentsRegistries;
 import io.netty.buffer.ByteBuf;
 
+import static de.mschae23.grindenchantments.registry.GrindEnchantmentsRegistries.COST_FUNCTIONS;
+
 public interface CostFunctionType<M extends CostFunction> {
-    CostFunctionType<CountEnchantmentsCostFunction> COUNT_ENCHANTMENTS = register("count_enchantments", CountEnchantmentsCostFunction.TYPE);
-    CostFunctionType<CountLevelsCostFunction> COUNT_LEVELS = register("count_levels", CountLevelsCostFunction.TYPE);
-    CostFunctionType<CountMinPowerCostFunction> COUNT_MIN_POWER = register("count_min_power", CountMinPowerCostFunction.TYPE);
-    CostFunctionType<AverageCountCostFunction> AVERAGE_COUNT = register("average_count", AverageCountCostFunction.TYPE);
-    CostFunctionType<FirstEnchantmentCostFunction> FIRST_ENCHANTMENT = register("first_enchantment", FirstEnchantmentCostFunction.TYPE);
-    CostFunctionType<TransformCostFunction> TRANSFORM = register("transform", TransformCostFunction.TYPE);
-    CostFunctionType<FilterCostFunction> FILTER = register("filter", FilterCostFunction.TYPE);
+//    CostFunctionType<CountEnchantmentsCostFunction> COUNT_ENCHANTMENTS = register("count_enchantments", CountEnchantmentsCostFunction.TYPE);
+//    CostFunctionType<CountLevelsCostFunction> COUNT_LEVELS = register("count_levels", CountLevelsCostFunction.TYPE);
+//    CostFunctionType<CountMinPowerCostFunction> COUNT_MIN_POWER = register("count_min_power", CountMinPowerCostFunction.TYPE);
+//    CostFunctionType<AverageCountCostFunction> AVERAGE_COUNT = register("average_count", AverageCountCostFunction.TYPE);
+//    CostFunctionType<FirstEnchantmentCostFunction> FIRST_ENCHANTMENT = register("first_enchantment", FirstEnchantmentCostFunction.TYPE);
+//    CostFunctionType<TransformCostFunction> TRANSFORM = register("transform", TransformCostFunction.TYPE);
+//    CostFunctionType<FilterCostFunction> FILTER = register("filter", FilterCostFunction.TYPE);
+
+
+    Supplier<CostFunctionType<CountEnchantmentsCostFunction>> COUNT_ENCHANTMENTS = COST_FUNCTIONS.register("count_enchantments",()->CountEnchantmentsCostFunction.TYPE);
+    Supplier<CostFunctionType<CountLevelsCostFunction>> COUNT_LEVELS = COST_FUNCTIONS.register("count_levels",()->CountLevelsCostFunction.TYPE);
+    Supplier<CostFunctionType<CountMinPowerCostFunction>> COUNT_MIN_POWER = COST_FUNCTIONS.register("count_min_power",()->CountMinPowerCostFunction.TYPE);
+    Supplier<CostFunctionType<AverageCountCostFunction>> AVERAGE_COUNT = COST_FUNCTIONS.register("average_count",()->AverageCountCostFunction.TYPE);
+    Supplier<CostFunctionType<FirstEnchantmentCostFunction>> FIRST_ENCHANTMENT = COST_FUNCTIONS.register("first_enchantment",()->FirstEnchantmentCostFunction.TYPE);
+    Supplier<CostFunctionType<TransformCostFunction>> TRANSFORM = COST_FUNCTIONS.register("transform",()->TransformCostFunction.TYPE);
+    Supplier<CostFunctionType<FilterCostFunction>> FILTER = COST_FUNCTIONS.register("filter",()->FilterCostFunction.TYPE);
 
     MapCodec<M> codec();
-    PacketCodec<PacketByteBuf, M> packetCodec(PacketCodec<PacketByteBuf, CostFunction> delegateCodec);
+    StreamCodec<FriendlyByteBuf, M> packetCodec(StreamCodec<FriendlyByteBuf, CostFunction> delegateCodec);
 
-    static <M extends CostFunction> CostFunctionType<M> register(String id, CostFunctionType<M> type) {
-        return Registry.register(GrindEnchantmentsRegistries.COST_FUNCTION, GrindEnchantmentsMod.id(id), type);
-    }
+//    static <M extends CostFunction> CostFunctionType<M> register(String id, CostFunctionType<M> type) {
+//        return Registry.register(GrindEnchantmentsRegistries.COST_FUNCTION_REGISTRY, GrindEnchantmentsMod.id(id), type);
+//    }
 
-    static PacketCodec<ByteBuf, CostFunctionType<?>> createPacketCodec() {
-        return RegistryKey.createPacketCodec(GrindEnchantmentsRegistries.COST_FUNCTION_KEY).xmap(
-            key -> GrindEnchantmentsRegistries.COST_FUNCTION.getOrEmpty(key).orElseThrow(
-                () -> new IllegalStateException("Can't decode '" + key.getValue() + "', unregistered value")),
-            type -> GrindEnchantmentsRegistries.COST_FUNCTION.getKey(type).orElseThrow(
+    static StreamCodec<ByteBuf, CostFunctionType<?>> createPacketCodec() {
+        return ResourceKey.streamCodec(GrindEnchantmentsRegistries.COST_FUNCTION_KEY).map(
+            key -> GrindEnchantmentsRegistries.COST_FUNCTION_REGISTRY.getOptional(key).orElseThrow(
+                () -> new IllegalStateException("Can't decode '" + key.location() + "', unregistered value")),
+            type -> GrindEnchantmentsRegistries.COST_FUNCTION_REGISTRY.getResourceKey(type).orElseThrow(
                 () -> new IllegalStateException("Can't encode '" + type + "', unregistered value"))
         );
     }
@@ -57,14 +70,14 @@ public interface CostFunctionType<M extends CostFunction> {
     static void init() {
     }
 
-    record Impl<M extends CostFunction>(MapCodec<M> codec, Function<PacketCodec<PacketByteBuf, CostFunction>, PacketCodec<PacketByteBuf, M>> packetCodec) implements CostFunctionType<M> {
+    record Impl<M extends CostFunction>(MapCodec<M> codec, Function<StreamCodec<FriendlyByteBuf, CostFunction>, StreamCodec<FriendlyByteBuf, M>> packetCodec) implements CostFunctionType<M> {
         @Override
         public MapCodec<M> codec() {
             return this.codec;
         }
 
         @Override
-        public PacketCodec<PacketByteBuf, M> packetCodec(PacketCodec<PacketByteBuf, CostFunction> delegateCodec) {
+        public StreamCodec<FriendlyByteBuf, M> packetCodec(StreamCodec<FriendlyByteBuf, CostFunction> delegateCodec) {
             return this.packetCodec.apply(delegateCodec);
         }
     }

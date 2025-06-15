@@ -19,19 +19,31 @@
 
 package de.mschae23.grindenchantments.registry;
 
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
-import net.fabricmc.fabric.api.event.registry.FabricRegistryBuilder;
 import de.mschae23.grindenchantments.GrindEnchantmentsMod;
 import de.mschae23.grindenchantments.cost.CostFunctionType;
+import net.minecraft.core.Registry;
+import net.minecraft.resources.ResourceKey;
+import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.registries.NewRegistryEvent;
+import net.neoforged.neoforge.registries.RegistryBuilder;
+
+//import net.fabricmc.fabric.api.event.registry.FabricRegistryBuilder;
+//import net.minecraft.registry.Registry;
+//import net.minecraft.registry.RegistryKey;
 
 public final class GrindEnchantmentsRegistries {
-    public static final RegistryKey<Registry<CostFunctionType<?>>> COST_FUNCTION_KEY = RegistryKey.ofRegistry(GrindEnchantmentsMod.id("cost_function_type"));
-    public static final Registry<CostFunctionType<?>> COST_FUNCTION = FabricRegistryBuilder.createSimple(COST_FUNCTION_KEY).buildAndRegister();
+    public static final ResourceKey<Registry<CostFunctionType<?>>> COST_FUNCTION_KEY = ResourceKey.createRegistryKey(GrindEnchantmentsMod.id("cost_function_type"));
+    public static final Registry<CostFunctionType<?>> COST_FUNCTION_REGISTRY = new RegistryBuilder<>(COST_FUNCTION_KEY)
+                        .sync(true)
+                        .create();
+    public static final DeferredRegister<CostFunctionType<?>> COST_FUNCTIONS = DeferredRegister.create(COST_FUNCTION_REGISTRY, GrindEnchantmentsMod.MODID);
 
     private GrindEnchantmentsRegistries() {
     }
 
-    public static void init() {
+    public static void init() {}
+
+    public static void registerRegistries(NewRegistryEvent event) {
+        event.register(COST_FUNCTION_REGISTRY);
     }
 }

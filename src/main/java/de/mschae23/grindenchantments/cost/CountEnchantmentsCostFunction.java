@@ -19,12 +19,12 @@
 
 package de.mschae23.grindenchantments.cost;
 
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.registry.RegistryWrapper;
 import com.mojang.serialization.MapCodec;
 import de.mschae23.grindenchantments.config.FilterConfig;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 public class CountEnchantmentsCostFunction implements CostFunction {
     public static final CountEnchantmentsCostFunction INSTANCE = new CountEnchantmentsCostFunction();
@@ -32,17 +32,17 @@ public class CountEnchantmentsCostFunction implements CostFunction {
     public static final CostFunctionType<CountEnchantmentsCostFunction> TYPE = new CostFunctionType.Impl<>(TYPE_CODEC, CountEnchantmentsCostFunction::packetCodec);
 
     @Override
-    public double getCost(ItemEnchantmentsComponent enchantments, FilterConfig filter, RegistryWrapper.WrapperLookup wrapperLookup) {
-        return enchantments.getEnchantments().size();
+    public double getCost(ItemEnchantments enchantments, FilterConfig filter, HolderLookup.Provider wrapperLookup) {
+        return enchantments.keySet().size();
     }
 
     @Override
     public CostFunctionType<?> getType() {
-        return CostFunctionType.COUNT_ENCHANTMENTS;
+        return CostFunctionType.COUNT_ENCHANTMENTS.get();
     }
 
-    public static PacketCodec<PacketByteBuf, CountEnchantmentsCostFunction> packetCodec(PacketCodec<PacketByteBuf, CostFunction> delegateCodec) {
-        return PacketCodec.unit(INSTANCE);
+    public static StreamCodec<FriendlyByteBuf, CountEnchantmentsCostFunction> packetCodec(StreamCodec<FriendlyByteBuf, CostFunction> delegateCodec) {
+        return StreamCodec.unit(INSTANCE);
     }
 
     @Override

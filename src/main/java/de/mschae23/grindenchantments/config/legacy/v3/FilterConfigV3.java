@@ -20,7 +20,7 @@
 package de.mschae23.grindenchantments.config.legacy.v3;
 
 import java.util.List;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import de.mschae23.grindenchantments.CodecUtils;
@@ -43,18 +43,18 @@ public record FilterConfigV3(boolean enabled, ItemConfig item, EnchantmentConfig
             new FilterConfig.EnchantmentConfig(this.enchantment.enchantments, this.enchantment.action), this.curses);
     }
 
-    public record ItemConfig(List<Identifier> items, FilterAction action) {
+    public record ItemConfig(List<ResourceLocation> items, FilterAction action) {
         public static final Codec<ItemConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            CodecUtils.listOrSingle(Identifier.CODEC).fieldOf("enchantments").forGetter(ItemConfig::items),
+            CodecUtils.listOrSingle(ResourceLocation.CODEC).fieldOf("enchantments").forGetter(ItemConfig::items),
             FilterAction.NON_IGNORE_CODEC.fieldOf("action").forGetter(ItemConfig::action)
         ).apply(instance, instance.stable(ItemConfig::new)));
 
         public static final ItemConfig DEFAULT = new ItemConfig(List.of(), FilterAction.DENY);
     }
 
-    public record EnchantmentConfig(List<Identifier> enchantments, FilterAction action) {
+    public record EnchantmentConfig(List<ResourceLocation> enchantments, FilterAction action) {
         public static final Codec<EnchantmentConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            CodecUtils.listOrSingle(Identifier.CODEC).fieldOf("enchantments").forGetter(EnchantmentConfig::enchantments),
+            CodecUtils.listOrSingle(ResourceLocation.CODEC).fieldOf("enchantments").forGetter(EnchantmentConfig::enchantments),
             FilterAction.CODEC.fieldOf("action").forGetter(EnchantmentConfig::action)
         ).apply(instance, instance.stable(EnchantmentConfig::new)));
 

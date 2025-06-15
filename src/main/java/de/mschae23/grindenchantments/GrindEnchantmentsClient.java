@@ -19,51 +19,87 @@
 
 package de.mschae23.grindenchantments;
 
-import java.util.stream.Stream;
-import net.minecraft.registry.RegistryWrapper;
-import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
-import net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationConnectionEvents;
-import net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationNetworking;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import de.mschae23.grindenchantments.config.ClientConfig;
 import de.mschae23.grindenchantments.config.sync.ServerConfigS2CPayload;
 import de.mschae23.grindenchantments.registry.GrindEnchantmentsRegistries;
+import net.minecraft.core.HolderLookup;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import org.apache.logging.log4j.Level;
 
-public class GrindEnchantmentsClient implements ClientModInitializer {
-    private static ClientConfig CLIENT_CONFIG = ClientConfig.DEFAULT;
+import java.util.stream.Stream;
 
-    @Override
-    public void onInitializeClient() {
-        ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
-            CLIENT_CONFIG = GrindEnchantmentsMod.initializeClientConfig();
-            GrindEnchantmentsMod.LOCAL_SERVER_CONFIG = GrindEnchantmentsMod.initializeServerConfig(RegistryWrapper.WrapperLookup.of(
-                Stream.of(GrindEnchantmentsRegistries.COST_FUNCTION.getReadOnlyWrapper())));
+public class GrindEnchantmentsClient {
+    public static ClientConfig CLIENT_CONFIG = ClientConfig.DEFAULT;
 
-            ClientConfigurationNetworking.registerGlobalReceiver(ServerConfigS2CPayload.ID, (payload, context) -> {
-                //noinspection resource
-                context.client().execute(() -> {
-                    GrindEnchantmentsMod.SERVER_CONFIG = payload.config();
-
-                    if (CLIENT_CONFIG.sync().logReceivedConfig()) {
-                        GrindEnchantmentsMod.log(Level.INFO, "Received server config: " + GrindEnchantmentsMod.SERVER_CONFIG);
-                    }
-                });
-            });
-        });
-
-        ClientPlayConnectionEvents.INIT.register((handler, client2) -> {
+    @EventBusSubscriber(modid = GrindEnchantmentsMod.MODID, bus = EventBusSubscriber.Bus.GAME, value= Dist.CLIENT)
+    public static class ClientGameEvents
+    {
+        @SubscribeEvent
+        static public void onPlayInit(ClientPlayerNetworkEvent.LoggingIn event)
+        {
+            GrindEnchantmentsMod.SERVER_CONFIG = null;
+        }
+        @SubscribeEvent
+        static public void onPlayLogOut(ClientPlayerNetworkEvent.LoggingOut event)
+        {
+            GrindEnchantmentsMod.SERVER_CONFIG = null;
+        }
+        @SubscribeEvent
+        static public void onPlayInit(PlayerEvent.PlayerLoggedInEvent event) {
             if (GrindEnchantmentsMod.SERVER_CONFIG != null) {
-                GrindEnchantmentsMod.SERVER_CONFIG.validateRegistryEntries(handler.getRegistryManager());
+                GrindEnchantmentsMod.SERVER_CONFIG.validateRegistryEntries(event.getEntity().registryAccess());
             }
-        });
+        }
 
-        // Set server config to null when joining a world, so that it is known whether the server sent its config
-        ClientConfigurationConnectionEvents.INIT.register((handler, client2) -> GrindEnchantmentsMod.SERVER_CONFIG = null);
-        // Set server config to null when leaving the world too, for the same reason
-        ClientConfigurationConnectionEvents.DISCONNECT.register((handler, client2) -> GrindEnchantmentsMod.SERVER_CONFIG = null);
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client2) -> GrindEnchantmentsMod.SERVER_CONFIG = null);
+        @SubscribeEvent
+        static public void onPlayLogOut(PlayerEvent.PlayerLoggedOutEvent event) {
+            GrindEnchantmentsMod.SERVER_CONFIG = null;
+        }
+    }
+    @EventBusSubscriber(modid = GrindEnchantmentsMod.MODID, bus = EventBusSubscriber.Bus.MOD, value= Dist.CLIENT)
+    public static class ClientModEvents {
+        @SubscribeEvent
+        static public void onInitializeClient(FMLClientSetupEvent event)
+        {
+            CLIENT_CONFIG = GrindEnchantmentsMod.initializeClientConfig();
+            GrindEnchantmentsMod.LOCAL_SERVER_CONFIG = GrindEnchantmentsMod.initializeServerConfig(HolderLookup.Provider.create(
+                Stream.of(GrindEnchantmentsRegistries.COST_FUNCTION_REGISTRY.asLookup())));
+        }
+    }
+    public void onInitializeClient() {
+//        ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
+//            CLIENT_CONFIG = GrindEnchantmentsMod.initializeClientConfig();
+//            GrindEnchantmentsMod.LOCAL_SERVER_CONFIG = GrindEnchantmentsMod.initializeServerConfig(RegistryWrapper.WrapperLookup.of(
+//                Stream.of(GrindEnchantmentsRegistries.COST_FUNCTION.getReadOnlyWrapper())));
+//
+//            ClientConfigurationNetworking.registerGlobalReceiver(ServerConfigS2CPayload.ID, (payload, context) -> {
+//                //noinspection resource
+//                context.client().execute(() -> {
+//                    GrindEnchantmentsMod.SERVER_CONFIG = payload.config();
+//
+//                    if (CLIENT_CONFIG.sync().logReceivedConfig()) {
+//                        GrindEnchantmentsMod.log(Level.INFO, "Received server config: " + GrindEnchantmentsMod.SERVER_CONFIG);
+//                    }
+//                });
+//            });
+//        });
+//
+//        ClientPlayConnectionEvents.INIT.register((handler, client2) -> {
+//            if (GrindEnchantmentsMod.SERVER_CONFIG != null) {
+//                GrindEnchantmentsMod.SERVER_CONFIG.validateRegistryEntries(handler.getRegistryManager());
+//            }
+//        });
+//
+//        // Set server config to null when joining a world, so that it is known whether the server sent its config
+//        ClientConfigurationConnectionEvents.INIT.register((handler, client2) -> GrindEnchantmentsMod.SERVER_CONFIG = null);
+//        // Set server config to null when leaving the world too, for the same reason
+//        ClientConfigurationConnectionEvents.DISCONNECT.register((handler, client2) -> GrindEnchantmentsMod.SERVER_CONFIG = null);
+//        ClientPlayConnectionEvents.DISCONNECT.register((handler, client2) -> GrindEnchantmentsMod.SERVER_CONFIG = null);
     }
 
     public static ClientConfig getClientConfig() {

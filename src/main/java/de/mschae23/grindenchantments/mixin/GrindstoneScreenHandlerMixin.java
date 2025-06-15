@@ -19,21 +19,17 @@
 
 package de.mschae23.grindenchantments.mixin;
 
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.screen.GrindstoneScreenHandler;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.screen.ScreenHandlerContext;
-import net.minecraft.screen.ScreenHandlerType;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.world.WorldEvents;
 import com.llamalad7.mixinextras.sugar.Local;
 import de.mschae23.grindenchantments.GrindEnchantments;
 import de.mschae23.grindenchantments.GrindEnchantmentsMod;
 import de.mschae23.grindenchantments.config.ServerConfig;
 import de.mschae23.grindenchantments.event.GrindstoneEvents;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.*;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.LevelEvent;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -43,33 +39,37 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(GrindstoneScreenHandler.class)
-public abstract class GrindstoneScreenHandlerMixin extends ScreenHandler {
+@Mixin(GrindstoneMenu.class)
+public abstract class GrindstoneScreenHandlerMixin extends AbstractContainerMenu {
     @Shadow
     @Final
-    public Inventory input;
+    public Container repairSlots;
     @Final
     @Shadow
-    public Inventory result;
+    public Container resultSlots;
 
     @Unique
-    private PlayerEntity grindenchantments_player;
+    private Player grindenchantments_player;
 
-    protected GrindstoneScreenHandlerMixin(ScreenHandlerType<?> type, int syncId) {
+    protected GrindstoneScreenHandlerMixin(MenuType<?> type, int syncId) {
         super(type, syncId);
     }
 
-    @Inject(at = @At("RETURN"), method = "<init>(ILnet/minecraft/entity/player/PlayerInventory;Lnet/minecraft/screen/ScreenHandlerContext;)V")
-    private void onReturnConstructor(int syncId, PlayerInventory playerInventory, final ScreenHandlerContext context, CallbackInfo ci) {
+    @Inject(at = @At("RETURN"), method = "Lnet/minecraft/world/inventory/GrindstoneMenu;<init>(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/inventory/ContainerLevelAccess;)V")
+    private void onReturnConstructor(int containerId, Inventory playerInventory, final ContainerLevelAccess access, CallbackInfo ci) {
         this.grindenchantments_player = playerInventory.player;
     }
 
-    @Inject(at = @At("RETURN"), method = "getOutputStack", cancellable = true)
+    @Inject(at = @At("RETURN"), method = "Lnet/minecraft/world/inventory/GrindstoneMenu;computeResult(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/item/ItemStack;)Lnet/minecraft/world/item/ItemStack;", cancellable = true)
     private void onGetOutputStack(ItemStack input1, ItemStack input2, CallbackInfoReturnable<ItemStack> cir) {
-        PlayerEntity player = this.grindenchantments_player;
+        Player player = this.grindenchantments_player;
 
+        if (player == null) {
+            GrindEnchantmentsMod.LOGGER.warn("Player not found while accessing grindstone!");
+            return;
+        }
         if (cir.getReturnValue().isEmpty()) {
-            ItemStack result = GrindstoneEvents.UPDATE_RESULT.invoker().onUpdateResult(input1, input2, player, player.getRegistryManager());
+            ItemStack result = GrindstoneEvents.onUpdateResult(input1, input2, player, player.registryAccess());
 
             if (!result.isEmpty()) {
                 cir.setReturnValue(result);
@@ -77,8 +77,8 @@ public abstract class GrindstoneScreenHandlerMixin extends ScreenHandler {
         }
     }
 
-    @Inject(method = "quickMove", at = @At(value = "INVOKE", target = "Lnet/minecraft/screen/GrindstoneScreenHandler;insertItem(Lnet/minecraft/item/ItemStack;IIZ)Z", ordinal = 0))
-    private void onInsertResultItem(PlayerEntity player, int index, CallbackInfoReturnable<ItemStack> cir, @Local(ordinal = 1) ItemStack itemStack2) {
+    @Inject(method = "quickMoveStack", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/inventory/GrindstoneMenu;moveItemStackTo(Lnet/minecraft/world/item/ItemStack;IIZ)Z", ordinal = 0))
+    private void onInsertResultItem(Player player, int index, CallbackInfoReturnable<ItemStack> cir, @Local(ordinal = 1) ItemStack itemStack2) {
         ServerConfig config = GrindEnchantmentsMod.getServerConfig();
 
         if (config.dedicatedServerConfig().alternativeCostDisplay()) {
@@ -86,58 +86,58 @@ public abstract class GrindstoneScreenHandlerMixin extends ScreenHandler {
         }
     }
 
-    @Mixin(targets = "net/minecraft/screen/GrindstoneScreenHandler$2")
+    @Mixin(targets = "net/minecraft/world/inventory/GrindstoneMenu$2")
     public static class Anonymous2Mixin extends Slot {
-        public Anonymous2Mixin(Inventory inventory, int index, int x, int y) {
+        public Anonymous2Mixin(Container inventory, int index, int x, int y) {
             super(inventory, index, x, y);
         }
 
-        @Inject(method = "canInsert(Lnet/minecraft/item/ItemStack;)Z", at = @At("RETURN"), cancellable = true)
+        @Inject(method = "mayPlace(Lnet/minecraft/world/item/ItemStack;)Z", at = @At("RETURN"), cancellable = true)
         private void canInsertBooks(ItemStack stack, CallbackInfoReturnable<Boolean> cir) {
-            cir.setReturnValue(cir.getReturnValueZ() || GrindstoneEvents.CAN_INSERT.invoker().canInsert(stack, this.inventory.getStack(1), 0));
+            cir.setReturnValue(cir.getReturnValueZ() || GrindstoneEvents.canInsert(stack, this.container.getItem(1), 0));
         }
     }
 
-    @Mixin(targets = "net/minecraft/screen/GrindstoneScreenHandler$3")
+    @Mixin(targets = "net/minecraft/world/inventory/GrindstoneMenu$3")
     public static class Anonymous3Mixin extends Slot {
-        public Anonymous3Mixin(Inventory inventory, int index, int x, int y) {
+        public Anonymous3Mixin(Container inventory, int index, int x, int y) {
             super(inventory, index, x, y);
         }
 
-        @Inject(method = "canInsert(Lnet/minecraft/item/ItemStack;)Z", at = @At("RETURN"), cancellable = true)
+        @Inject(method = "mayPlace(Lnet/minecraft/world/item/ItemStack;)Z", at = @At("RETURN"), cancellable = true)
         private void canInsertBooks(ItemStack stack, CallbackInfoReturnable<Boolean> cir) {
-            cir.setReturnValue(cir.getReturnValueZ() || GrindstoneEvents.CAN_INSERT.invoker().canInsert(stack, this.inventory.getStack(0), 1));
+            cir.setReturnValue(cir.getReturnValueZ() || GrindstoneEvents.canInsert(stack, this.container.getItem(0), 1));
         }
     }
 
-    @Mixin(targets = "net/minecraft/screen/GrindstoneScreenHandler$4")
+    @Mixin(targets = "net/minecraft/world/inventory/GrindstoneMenu$4")
     public static abstract class Anonymous4Mixin extends Slot {
         @Final
         @Shadow
-        ScreenHandlerContext field_16779;
+        ContainerLevelAccess val$access;
         @Shadow
         @Final
-        GrindstoneScreenHandler field_16780;
+        GrindstoneMenu this$0;
 
-        public Anonymous4Mixin(Inventory inventory, int index, int x, int y) {
+        public Anonymous4Mixin(Container inventory, int index, int x, int y) {
             super(inventory, index, x, y);
         }
 
-        @Inject(method = "onTakeItem", at = @At("HEAD"), cancellable = true)
-        private void onTakeResult(PlayerEntity player, ItemStack stack, CallbackInfo ci) {
-            Inventory input = this.field_16780.input;
+        @Inject(method = "onTake", at = @At("HEAD"), cancellable = true)
+        private void onTakeResult(Player player, ItemStack stack, CallbackInfo ci) {
+            Container input = this.this$0.repairSlots;
 
-            ItemStack input1 = input.getStack(0);
-            ItemStack input2 = input.getStack(1);
+            ItemStack input1 = input.getItem(0);
+            ItemStack input2 = input.getItem(1);
 
-            boolean success = GrindstoneEvents.TAKE_RESULT.invoker().onTakeResult(input1, input2, stack, player, input, player.getRegistryManager());
+            boolean success = GrindstoneEvents.onTakeResult(input1, input2, stack, player, input, player.registryAccess());
 
             if (GrindEnchantmentsMod.getServerConfig().dedicatedServerConfig().alternativeCostDisplay()) {
                 GrindEnchantments.removeLevelCostNbt(stack);
             }
 
             if (success) {
-                this.field_16779.run((world, pos) -> world.syncWorldEvent(WorldEvents.GRINDSTONE_USED, pos, 0)); // Plays grindstone sound
+                this.val$access.execute((world, pos) -> world.levelEvent(LevelEvent.SOUND_GRINDSTONE_USED, pos, 0)); // Plays grindstone sound
                 ci.cancel();
             }
         }
@@ -146,13 +146,13 @@ public abstract class GrindstoneScreenHandlerMixin extends ScreenHandler {
          * @author mschae23
          */
         @Override
-        public boolean canTakeItems(PlayerEntity player) {
-            Inventory input = this.field_16780.input;
+        public boolean mayPickup(Player player) {
+            Container input = this.this$0.repairSlots;
 
-            ItemStack input1 = input.getStack(0);
-            ItemStack input2 = input.getStack(1);
+            ItemStack input1 = input.getItem(0);
+            ItemStack input2 = input.getItem(1);
 
-            return GrindstoneEvents.CAN_TAKE_RESULT.invoker().canTakeResult(input1, input2, player, player.getRegistryManager());
+            return GrindstoneEvents.canTakeResult(input1, input2, player, player.registryAccess());
         }
     }
 }

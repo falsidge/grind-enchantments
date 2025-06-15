@@ -19,61 +19,61 @@
 
 package de.mschae23.grindenchantments.impl;
 
+import java.util.Optional;
 import java.util.function.IntSupplier;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.registry.entry.RegistryEntryList;
-import net.minecraft.registry.tag.EnchantmentTags;
-import net.minecraft.screen.AnvilScreenHandler;
+
 import de.mschae23.grindenchantments.GrindEnchantments;
+import de.mschae23.grindenchantments.event.GrindstoneEvents;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.HolderSet;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.tags.EnchantmentTags;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AnvilMenu;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 import de.mschae23.grindenchantments.GrindEnchantmentsMod;
 import de.mschae23.grindenchantments.config.FilterAction;
 import de.mschae23.grindenchantments.config.FilterConfig;
 import de.mschae23.grindenchantments.config.ServerConfig;
-import de.mschae23.grindenchantments.event.ApplyLevelCostEvent;
-import de.mschae23.grindenchantments.event.GrindstoneEvents;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.ObjectIntPair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class MoveOperation implements GrindstoneEvents.CanInsert, GrindstoneEvents.UpdateResult, GrindstoneEvents.CanTakeResult, GrindstoneEvents.TakeResult, GrindstoneEvents.LevelCost {
+public class MoveOperation implements Operation {
     @Override
     public boolean canInsert(ItemStack stack, ItemStack other, int slotId) {
-        return stack.getItem() == Items.BOOK && !other.isOf(Items.BOOK);
+        return stack.getItem() == Items.BOOK && !other.is(Items.BOOK);
     }
 
     @Override
-    public @NotNull ItemStack onUpdateResult(ItemStack input1, ItemStack input2, PlayerEntity player, RegistryWrapper.WrapperLookup wrapperLookup) {
-        if (!isMoveOperation(input1, input2)) {
+    public @NotNull ItemStack onUpdateResult(ItemStack input1, ItemStack input2, Player player, HolderLookup.Provider wrapperLookup) {
+        if (!isOperation(input1, input2)) {
             return ItemStack.EMPTY;
         }
 
         FilterConfig filter = GrindEnchantmentsMod.getServerConfig().filter();
 
         if (filter.enabled() && filter.item().action() != FilterAction.IGNORE
-            && (filter.item().action() == FilterAction.DENY) == input1.getRegistryEntry().getKey().map(key -> filter.item().items().contains(key.getValue())).orElse(false)) {
+            && (filter.item().action() == FilterAction.DENY) == input1.getItemHolder().unwrapKey().map(key -> filter.item().items().contains(key.location())).orElse(false)) {
             return ItemStack.EMPTY;
         }
-
-        ItemEnchantmentsComponent enchantments = GrindEnchantments.getEnchantments(input1, filter);
-        ObjectIntPair<RegistryEntry<Enchantment>> firstEnchantment = getFirstEnchantment(enchantments, wrapperLookup);
+        ItemEnchantments enchantments = GrindEnchantments.getEnchantments(input1, filter);
+        ObjectIntPair<Holder<Enchantment>> firstEnchantment = getFirstEnchantment(enchantments, wrapperLookup);
 
         if (firstEnchantment == null) {
             return ItemStack.EMPTY;
         }
 
         ItemStack result = input2.copy();
-        ItemEnchantmentsComponent.Builder builder = new ItemEnchantmentsComponent.Builder(result.getOrDefault(DataComponentTypes.STORED_ENCHANTMENTS, ItemEnchantmentsComponent.DEFAULT));
+        ItemEnchantments.Mutable builder = new ItemEnchantments.Mutable(result.getOrDefault(DataComponents.STORED_ENCHANTMENTS, ItemEnchantments.EMPTY));
         int targetLevel = builder.getLevel(firstEnchantment.left());
 
         if (targetLevel > 0) {
@@ -86,26 +86,26 @@ public class MoveOperation implements GrindstoneEvents.CanInsert, GrindstoneEven
             targetLevel = firstEnchantment.rightInt();
         }
 
-        builder.add(firstEnchantment.left(), targetLevel);
+        builder.upgrade(firstEnchantment.left(), targetLevel);
 
         if (result.getItem() == Items.BOOK) {
-            result = result.copyComponentsToNewStack(Items.ENCHANTED_BOOK, 1);
+            result = result.transmuteCopy(Items.ENCHANTED_BOOK, 1);
         }
 
         int repairCost = 0;
 
-        for(int i = 0; i < builder.getEnchantments().size(); i++) {
-            repairCost = AnvilScreenHandler.getNextCost(repairCost);
+        for(int i = 0; i < builder.keySet().size(); i++) {
+            repairCost = AnvilMenu.calculateIncreasedRepairCost(repairCost);
         }
 
-        result.set(DataComponentTypes.STORED_ENCHANTMENTS, builder.build());
-        result.set(DataComponentTypes.REPAIR_COST, repairCost);
+        result.set(DataComponents.STORED_ENCHANTMENTS, builder.toImmutable());
+        result.set(DataComponents.REPAIR_COST, repairCost);
         return result;
     }
 
     @Override
-    public boolean canTakeResult(ItemStack input1, ItemStack input2, PlayerEntity player, RegistryWrapper.WrapperLookup wrapperLookup) {
-        if (isMoveOperation(input1, input2)) {
+    public boolean canTakeResult(ItemStack input1, ItemStack input2, Player player, HolderLookup.Provider wrapperLookup) {
+        if (isOperation(input1, input2)) {
             ServerConfig config = GrindEnchantmentsMod.getServerConfig();
 
             return canTakeResult(input1, input2, () ->
@@ -116,49 +116,49 @@ public class MoveOperation implements GrindstoneEvents.CanInsert, GrindstoneEven
     }
 
     @Override
-    public boolean onTakeResult(ItemStack input1, ItemStack input2, ItemStack resultStack, PlayerEntity player, Inventory input, RegistryWrapper.WrapperLookup wrapperLookup) {
-        if (!isMoveOperation(input1, input2)) {
+    public boolean onTakeResult(ItemStack input1, ItemStack input2, ItemStack resultStack, Player player, Container input, HolderLookup.Provider wrapperLookup) {
+        if (!isOperation(input1, input2)) {
             return false;
         }
 
         ServerConfig config = GrindEnchantmentsMod.getServerConfig();
         FilterConfig filter = config.filter();
 
-        ItemEnchantmentsComponent enchantments = EnchantmentHelper.getEnchantments(input1);
-        ObjectIntPair<RegistryEntry<Enchantment>> firstEnchantment = getFirstEnchantment(filter.filter(enchantments), wrapperLookup);
+        ItemEnchantments enchantments = EnchantmentHelper.getEnchantmentsForCrafting(input1);
+        ObjectIntPair<Holder<Enchantment>> firstEnchantment = getFirstEnchantment(filter.filter(enchantments), wrapperLookup);
 
         if (firstEnchantment == null) {
             return false;
         }
 
-        ItemEnchantmentsComponent.Builder builder = new ItemEnchantmentsComponent.Builder(enchantments);
-        builder.remove(enchantment -> enchantment.value().equals(firstEnchantment.left().value()));
+        ItemEnchantments.Mutable builder = new ItemEnchantments.Mutable(enchantments);
+        builder.removeIf(enchantment -> enchantment.value().equals(firstEnchantment.left().value()));
 
         ItemStack resultingInput1 = new ItemStack(Items.ENCHANTED_BOOK);
-        EnchantmentHelper.set(resultingInput1, builder.build());
-        resultingInput1.set(DataComponentTypes.REPAIR_COST, AnvilScreenHandler.getNextCost(input1.getOrDefault(DataComponentTypes.REPAIR_COST, 0)));
+        EnchantmentHelper.setEnchantments(resultingInput1, builder.toImmutable());
+        resultingInput1.set(DataComponents.REPAIR_COST, AnvilMenu.calculateIncreasedRepairCost(input1.getOrDefault(DataComponents.REPAIR_COST, 0)));
 
-        input.setStack(0, resultingInput1);
+        input.setItem(0, resultingInput1);
 
         if (input2.getItem() == Items.ENCHANTED_BOOK || input2.getCount() == 1)
-            input.setStack(1, ItemStack.EMPTY);
+            input.setItem(1, ItemStack.EMPTY);
         else {
             ItemStack newBookStack = input2.copy();
             newBookStack.setCount(input2.getCount() - 1);
-            input.setStack(1, newBookStack);
+            input.setItem(1, newBookStack);
         }
 
-        if (!player.getAbilities().creativeMode) {
+        if (!player.getAbilities().instabuild) {
             int cost = GrindEnchantments.getLevelCost(input1, config.move().costFunction(), filter, wrapperLookup);
-            ApplyLevelCostEvent.EVENT.invoker().applyLevelCost(cost, player);
+            GrindstoneEvents.applyLevelCost(cost, player);
         }
 
         return true;
     }
 
     @Override
-    public int getLevelCost(ItemStack input1, ItemStack input2, PlayerEntity player, RegistryWrapper.WrapperLookup wrapperLookup) {
-        if (isMoveOperation(input1, input2)) {
+    public int getLevelCost(ItemStack input1, ItemStack input2, Player player, HolderLookup.Provider wrapperLookup) {
+        if (isOperation(input1, input2)) {
             ServerConfig config = GrindEnchantmentsMod.getServerConfig();
 
             return GrindEnchantments.getLevelCost(input1, config.move().costFunction(), config.filter(), wrapperLookup);
@@ -167,7 +167,7 @@ public class MoveOperation implements GrindstoneEvents.CanInsert, GrindstoneEven
         return -1;
     }
 
-    public static boolean isMoveOperation(ItemStack input1, ItemStack input2) {
+    public boolean isOperation(ItemStack input1, ItemStack input2) {
         if (!GrindEnchantmentsMod.getServerConfig().move().enabled())
             return false;
 
@@ -177,31 +177,33 @@ public class MoveOperation implements GrindstoneEvents.CanInsert, GrindstoneEven
     }
 
     public static boolean canTakeResult(@SuppressWarnings("unused") ItemStack input1, @SuppressWarnings("unused") ItemStack input2,
-                                        IntSupplier cost, PlayerEntity player) {
-        return player.getAbilities().creativeMode || player.experienceLevel >= cost.getAsInt();
+                                        IntSupplier cost, Player player) {
+        return player.getAbilities().instabuild || player.experienceLevel >= cost.getAsInt();
     }
 
     @Nullable
-    public static ObjectIntPair<RegistryEntry<Enchantment>> getFirstEnchantment(ItemEnchantmentsComponent enchantments, RegistryWrapper.WrapperLookup wrapperLookup) {
-        if (enchantments.getSize() < 2) {
+    public static ObjectIntPair<Holder<Enchantment>> getFirstEnchantment(ItemEnchantments enchantments, HolderLookup.Provider wrapperLookup) {
+        if (enchantments.size() < 2) {
             return null;
         }
-
-        RegistryEntryList<Enchantment> tooltipOrder = ItemEnchantmentsComponent.getTooltipOrderList(wrapperLookup, RegistryKeys.ENCHANTMENT, EnchantmentTags.TOOLTIP_ORDER);
+        ObjectIntPair<Holder<Enchantment>> firstEnchantment = null;
 
         @Nullable
-        ObjectIntPair<RegistryEntry<Enchantment>> firstEnchantment = null;
+        Optional<HolderSet.Named<Enchantment>> optional = wrapperLookup.lookupOrThrow(Registries.ENCHANTMENT).get(EnchantmentTags.TOOLTIP_ORDER);
+        if (optional.isEmpty()) {
+            return null;
+        }
+        HolderSet<Enchantment> tooltipOrder = optional.get();
 
-        for (RegistryEntry<Enchantment> entry : tooltipOrder) {
-            int level = enchantments.enchantments.getInt(entry);
+        for (Holder<Enchantment> entry : tooltipOrder) {
+            int level = enchantments.getLevel(entry);
 
             if (level > 0) {
                 firstEnchantment = ObjectIntPair.of(entry, level);
                 break;
             }
         }
-
-        for (Object2IntMap.Entry<RegistryEntry<Enchantment>> entry : enchantments.getEnchantmentEntries()) {
+        for (Object2IntMap.Entry<Holder<Enchantment>> entry : enchantments.entrySet()) {
             if (firstEnchantment == null && !tooltipOrder.contains(entry.getKey())) {
                 firstEnchantment = ObjectIntPair.of(entry.getKey(), entry.getIntValue());
                 break;

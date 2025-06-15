@@ -19,9 +19,6 @@
 
 package de.mschae23.grindenchantments.config;
 
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.codec.PacketCodecs;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import de.mschae23.grindenchantments.cost.CostFunction;
@@ -29,6 +26,9 @@ import de.mschae23.grindenchantments.cost.CountLevelsCostFunction;
 import de.mschae23.grindenchantments.cost.FilterCostFunction;
 import de.mschae23.grindenchantments.cost.FirstEnchantmentCostFunction;
 import de.mschae23.grindenchantments.cost.TransformCostFunction;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 
 public record MoveConfig(boolean enabled, CostFunction costFunction) {
     public static final Codec<MoveConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -43,9 +43,9 @@ public record MoveConfig(boolean enabled, CostFunction costFunction) {
     public static final MoveConfig DISABLED = new MoveConfig(false,
         new CountLevelsCostFunction(1.0, 1.0));
 
-    public static PacketCodec<PacketByteBuf, MoveConfig> createPacketCodec(PacketCodec<PacketByteBuf, CostFunction> costFunctionCodec) {
-        return PacketCodec.tuple(
-            PacketCodecs.BOOL, MoveConfig::enabled,
+    public static StreamCodec<FriendlyByteBuf, MoveConfig> createPacketCodec(StreamCodec<FriendlyByteBuf, CostFunction> costFunctionCodec) {
+        return StreamCodec.composite(
+            ByteBufCodecs.BOOL, MoveConfig::enabled,
             costFunctionCodec, MoveConfig::costFunction,
             MoveConfig::new
         );

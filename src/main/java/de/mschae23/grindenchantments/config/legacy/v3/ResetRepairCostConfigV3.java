@@ -20,7 +20,7 @@
 package de.mschae23.grindenchantments.config.legacy.v3;
 
 import java.util.List;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import de.mschae23.grindenchantments.CodecUtils;
@@ -31,16 +31,16 @@ import de.mschae23.grindenchantments.cost.CountLevelsCostFunction;
 import de.mschae23.grindenchantments.cost.TransformCostFunction;
 
 @Deprecated
-public record ResetRepairCostConfigV3(boolean enabled, List<Identifier> catalystItems, boolean requiresEnchantment, CostFunction costFunction) {
+public record ResetRepairCostConfigV3(boolean enabled, List<ResourceLocation> catalystItems, boolean requiresEnchantment, CostFunction costFunction) {
     public static final Codec<ResetRepairCostConfigV3> CODEC = RecordCodecBuilder.create(instance -> instance.group(
         Codec.BOOL.fieldOf("enabled").forGetter(ResetRepairCostConfigV3::enabled),
-        CodecUtils.listOrSingle(Identifier.CODEC).fieldOf("catalyst_items").forGetter(ResetRepairCostConfigV3::catalystItems),
+        CodecUtils.listOrSingle(ResourceLocation.CODEC).fieldOf("catalyst_items").forGetter(ResetRepairCostConfigV3::catalystItems),
         Codec.BOOL.fieldOf("requires_enchantment").forGetter(ResetRepairCostConfigV3::requiresEnchantment),
         CostFunction.CODEC.fieldOf("cost_function").forGetter(ResetRepairCostConfigV3::costFunction)
     ).apply(instance, instance.stable(ResetRepairCostConfigV3::new)));
 
     public static final ResetRepairCostConfigV3 DEFAULT = new ResetRepairCostConfigV3(false,
-        List.of(Identifier.ofVanilla("diamond")), true,
+        List.of(ResourceLocation.withDefaultNamespace("diamond")), true,
         // Intentionally no filter function
         new TransformCostFunction(new AverageCountCostFunction(new CountLevelsCostFunction(1.0, 4.0)), 1.5, 4.0));
 

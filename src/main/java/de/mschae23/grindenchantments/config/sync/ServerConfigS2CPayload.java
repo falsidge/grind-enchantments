@@ -19,28 +19,28 @@
 
 package de.mschae23.grindenchantments.config.sync;
 
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.codec.PacketCodecs;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
 import de.mschae23.grindenchantments.GrindEnchantmentsMod;
 import de.mschae23.grindenchantments.config.ServerConfig;
 import de.mschae23.grindenchantments.cost.CostFunction;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 
-public record ServerConfigS2CPayload(ServerConfig config) implements CustomPayload {
-    public static final Identifier PACKET_ID = GrindEnchantmentsMod.id("server_config");
-    public static final CustomPayload.Id<ServerConfigS2CPayload> ID = new CustomPayload.Id<>(PACKET_ID);
+public record ServerConfigS2CPayload(ServerConfig config) implements CustomPacketPayload {
+    public static final ResourceLocation PACKET_ID = GrindEnchantmentsMod.id("server_config");
+    public static final Type<ServerConfigS2CPayload> ID = new Type<>(PACKET_ID);
 
     @Override
-    public Id<? extends CustomPayload> getId() {
+    public Type<? extends CustomPacketPayload> type() {
         return ID;
     }
 
-    public static PacketCodec<PacketByteBuf, ServerConfigS2CPayload> createPacketCodec(PacketCodec<PacketByteBuf, CostFunction> costFunctionCodec) {
-        return PacketCodec.tuple(
+    public static StreamCodec<FriendlyByteBuf, ServerConfigS2CPayload> createPacketCodec(StreamCodec<FriendlyByteBuf, CostFunction> costFunctionCodec) {
+        return StreamCodec.composite(
             // Version field for forward compatibility
-            PacketCodecs.BYTE, payload -> (byte) 1,
+            ByteBufCodecs.BYTE, payload -> (byte) 1,
             ServerConfig.createPacketCodec(costFunctionCodec), ServerConfigS2CPayload::config,
             (version, config) -> new ServerConfigS2CPayload(config)
         );

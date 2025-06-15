@@ -19,15 +19,15 @@
 
 package de.mschae23.grindenchantments.cost;
 
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.codec.PacketCodecs;
-import net.minecraft.registry.RegistryWrapper;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import de.mschae23.grindenchantments.config.FilterConfig;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 public record TransformCostFunction(CostFunction function, double factor, double offset) implements CostFunction {
     public static final MapCodec<TransformCostFunction> TYPE_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -38,17 +38,17 @@ public record TransformCostFunction(CostFunction function, double factor, double
     public static final CostFunctionType.Impl<TransformCostFunction> TYPE = new CostFunctionType.Impl<>(TYPE_CODEC, TransformCostFunction::packetCodec);
 
     @Override
-    public double getCost(ItemEnchantmentsComponent enchantments, FilterConfig filter, RegistryWrapper.WrapperLookup wrapperLookup) {
+    public double getCost(ItemEnchantments enchantments, FilterConfig filter, HolderLookup.Provider wrapperLookup) {
         return (this.function.getCost(enchantments, filter, wrapperLookup)) * this.factor + this.offset;
     }
 
     @Override
     public CostFunctionType<?> getType() {
-        return CostFunctionType.TRANSFORM;
+        return CostFunctionType.TRANSFORM.get();
     }
 
-    public static PacketCodec<PacketByteBuf, TransformCostFunction> packetCodec(PacketCodec<PacketByteBuf, CostFunction> delegateCodec) {
-        return PacketCodec.tuple(delegateCodec, TransformCostFunction::function, PacketCodecs.DOUBLE, TransformCostFunction::factor, PacketCodecs.DOUBLE, TransformCostFunction::offset, TransformCostFunction::new);
+    public static StreamCodec<FriendlyByteBuf, TransformCostFunction> packetCodec(StreamCodec<FriendlyByteBuf, CostFunction> delegateCodec) {
+        return StreamCodec.composite(delegateCodec, TransformCostFunction::function, ByteBufCodecs.DOUBLE, TransformCostFunction::factor, ByteBufCodecs.DOUBLE, TransformCostFunction::offset, TransformCostFunction::new);
     }
 
     @Override

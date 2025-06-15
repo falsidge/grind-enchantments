@@ -19,17 +19,17 @@
 
 package de.mschae23.grindenchantments.cost;
 
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.registry.entry.RegistryEntry;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import de.mschae23.grindenchantments.config.FilterConfig;
 import de.mschae23.grindenchantments.impl.MoveOperation;
 import it.unimi.dsi.fastutil.objects.ObjectIntPair;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 public record FirstEnchantmentCostFunction(CostFunction function) implements CostFunction {
     public static final MapCodec<FirstEnchantmentCostFunction> TYPE_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -38,26 +38,26 @@ public record FirstEnchantmentCostFunction(CostFunction function) implements Cos
     public static final CostFunctionType.Impl<FirstEnchantmentCostFunction> TYPE = new CostFunctionType.Impl<>(TYPE_CODEC, FirstEnchantmentCostFunction::packetCodec);
 
     @Override
-    public double getCost(ItemEnchantmentsComponent enchantments, FilterConfig filter, RegistryWrapper.WrapperLookup wrapperLookup) {
-        ObjectIntPair<RegistryEntry<Enchantment>> firstEnchantment = MoveOperation.getFirstEnchantment(enchantments, wrapperLookup);
+    public double getCost(ItemEnchantments enchantments, FilterConfig filter, HolderLookup.Provider wrapperLookup) {
+        ObjectIntPair<Holder<Enchantment>> firstEnchantment = MoveOperation.getFirstEnchantment(enchantments, wrapperLookup);
 
         if (firstEnchantment == null) {
             return 1.0;
         } else {
-            ItemEnchantmentsComponent.Builder builder = new ItemEnchantmentsComponent.Builder(ItemEnchantmentsComponent.DEFAULT);
-            builder.add(firstEnchantment.left(), firstEnchantment.rightInt());
+            ItemEnchantments.Mutable builder = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
+            builder.upgrade(firstEnchantment.left(), firstEnchantment.rightInt());
 
-            return this.function.getCost(builder.build(), filter, wrapperLookup);
+            return this.function.getCost(builder.toImmutable(), filter, wrapperLookup);
         }
     }
 
     @Override
     public CostFunctionType<?> getType() {
-        return CostFunctionType.FIRST_ENCHANTMENT;
+        return CostFunctionType.FIRST_ENCHANTMENT.get();
     }
 
-    public static PacketCodec<PacketByteBuf, FirstEnchantmentCostFunction> packetCodec(PacketCodec<PacketByteBuf, CostFunction> delegateCodec) {
-        return PacketCodec.tuple(delegateCodec, FirstEnchantmentCostFunction::function, FirstEnchantmentCostFunction::new);
+    public static StreamCodec<FriendlyByteBuf, FirstEnchantmentCostFunction> packetCodec(StreamCodec<FriendlyByteBuf, CostFunction> delegateCodec) {
+        return StreamCodec.composite(delegateCodec, FirstEnchantmentCostFunction::function, FirstEnchantmentCostFunction::new);
     }
 
     @Override

@@ -20,31 +20,31 @@
 package de.mschae23.grindenchantments;
 
 import java.util.function.IntSupplier;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.component.type.LoreComponent;
-import net.minecraft.component.type.NbtComponent;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.ItemLore;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 import de.mschae23.grindenchantments.config.DedicatedServerConfig;
 import de.mschae23.grindenchantments.config.FilterConfig;
 import de.mschae23.grindenchantments.cost.CostFunction;
 
 public class GrindEnchantments {
-    public static int getLevelCost(ItemStack stack, CostFunction costFunction, FilterConfig filter, RegistryWrapper.WrapperLookup wrapperLookup) {
-        ItemEnchantmentsComponent enchantments = EnchantmentHelper.getEnchantments(stack);
+    public static int getLevelCost(ItemStack stack, CostFunction costFunction, FilterConfig filter, HolderLookup.Provider wrapperLookup) {
+        ItemEnchantments enchantments = EnchantmentHelper.getEnchantmentsForCrafting(stack);
         double cost = costFunction.getCost(enchantments, filter, wrapperLookup);
 
         return (int) Math.ceil(cost);
     }
 
-    public static ItemEnchantmentsComponent getEnchantments(ItemStack stack, FilterConfig filter) {
-        return filter.filter(EnchantmentHelper.getEnchantments(stack));
+    public static ItemEnchantments getEnchantments(ItemStack stack, FilterConfig filter) {
+        return filter.filter(EnchantmentHelper.getEnchantmentsForCrafting(stack));
     }
 
     public static ItemStack addLevelCostComponent(ItemStack stack, IntSupplier cost, boolean canTakeItem, DedicatedServerConfig config) {
@@ -52,8 +52,8 @@ public class GrindEnchantments {
             return stack;
 
         ItemStack changed = stack.copy();
-        changed.apply(DataComponentTypes.CUSTOM_DATA, NbtComponent.DEFAULT, nbt -> nbt.apply(compound -> {
-            NbtCompound tag = new NbtCompound();
+        changed.update(DataComponents.CUSTOM_DATA, CustomData.EMPTY, nbt -> nbt.update(compound -> {
+            CompoundTag tag = new CompoundTag();
             tag.putInt("Cost", cost.getAsInt());
             tag.putBoolean("CanTake", canTakeItem);
 
@@ -63,10 +63,10 @@ public class GrindEnchantments {
     }
 
     public static ItemStack addLevelCostLore(ItemStack stack, IntSupplier cost, boolean canTakeItem) {
-        MutableText text = Text.literal("Enchantment cost: " + cost.getAsInt())
-            .formatted(canTakeItem ? Formatting.GREEN : Formatting.RED);
+        MutableComponent text = Component.literal("Enchantment cost: " + cost.getAsInt())
+            .withStyle(canTakeItem ? ChatFormatting.GREEN : ChatFormatting.RED);
 
-        stack.apply(DataComponentTypes.LORE, LoreComponent.DEFAULT, lore -> lore.with(text));
+        stack.update(DataComponents.LORE, ItemLore.EMPTY, lore -> lore.withLineAdded(text));
         return stack;
     }
 
@@ -78,7 +78,7 @@ public class GrindEnchantments {
     public static ItemStack removeLevelCostNbt(ItemStack stack) {
         // Relies on ItemStacks being mutable AND the stack not being copied into the player inventory before calling this method
 
-        stack.apply(DataComponentTypes.CUSTOM_DATA, NbtComponent.DEFAULT, nbt -> nbt.apply(compound ->
+        stack.update(DataComponents.CUSTOM_DATA, CustomData.EMPTY, nbt -> nbt.update(compound ->
             compound.remove(GrindEnchantmentsMod.MODID)));
         return stack;
     }

@@ -19,24 +19,24 @@
 
 package de.mschae23.grindenchantments.cost;
 
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.registry.RegistryWrapper;
 import com.mojang.serialization.Codec;
 import de.mschae23.grindenchantments.config.FilterConfig;
 import de.mschae23.grindenchantments.registry.GrindEnchantmentsRegistries;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 public interface CostFunction {
-    Codec<CostFunction> CODEC = GrindEnchantmentsRegistries.COST_FUNCTION.getCodec().dispatch(CostFunction::getType, CostFunctionType::codec);
+    Codec<CostFunction> CODEC = GrindEnchantmentsRegistries.COST_FUNCTION_REGISTRY.byNameCodec().dispatch(CostFunction::getType, CostFunctionType::codec);
 
-    double getCost(ItemEnchantmentsComponent enchantments, FilterConfig filter, RegistryWrapper.WrapperLookup wrapperLookup);
+    double getCost(ItemEnchantments enchantments, FilterConfig filter, HolderLookup.Provider wrapperLookup);
 
     CostFunctionType<?> getType();
 
-    static PacketCodec<PacketByteBuf, CostFunction> createPacketCodec() {
-        return PacketCodec.recursive(delegateCodec ->
-            CostFunctionType.createPacketCodec().<PacketByteBuf>cast().dispatch(CostFunction::getType,
+    static StreamCodec<FriendlyByteBuf, CostFunction> createPacketCodec() {
+        return StreamCodec.recursive(delegateCodec ->
+            CostFunctionType.createPacketCodec().<FriendlyByteBuf>cast().dispatch(CostFunction::getType,
                 type -> type.packetCodec(delegateCodec)));
     }
 

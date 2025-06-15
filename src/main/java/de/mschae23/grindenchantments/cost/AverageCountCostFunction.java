@@ -19,13 +19,13 @@
 
 package de.mschae23.grindenchantments.cost;
 
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.registry.RegistryWrapper;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import de.mschae23.grindenchantments.config.FilterConfig;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 public record AverageCountCostFunction(CostFunction function) implements CostFunction {
     public static final MapCodec<AverageCountCostFunction> TYPE_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -34,9 +34,9 @@ public record AverageCountCostFunction(CostFunction function) implements CostFun
     public static final CostFunctionType.Impl<AverageCountCostFunction> TYPE = new CostFunctionType.Impl<>(TYPE_CODEC, AverageCountCostFunction::packetCodec);
 
     @Override
-    public double getCost(ItemEnchantmentsComponent enchantments, FilterConfig filter, RegistryWrapper.WrapperLookup wrapperLookup) {
+    public double getCost(ItemEnchantments enchantments, FilterConfig filter, HolderLookup.Provider wrapperLookup) {
         double cost = this.function.getCost(enchantments, filter, wrapperLookup);
-        long count = enchantments.getEnchantments().size();
+        long count = enchantments.keySet().size();
 
         if (count == 0) {
             return cost;
@@ -47,11 +47,11 @@ public record AverageCountCostFunction(CostFunction function) implements CostFun
 
     @Override
     public CostFunctionType<?> getType() {
-        return CostFunctionType.AVERAGE_COUNT;
+        return CostFunctionType.AVERAGE_COUNT.get();
     }
 
-    public static PacketCodec<PacketByteBuf, AverageCountCostFunction> packetCodec(PacketCodec<PacketByteBuf, CostFunction> delegateCodec) {
-        return PacketCodec.tuple(delegateCodec, AverageCountCostFunction::function, AverageCountCostFunction::new);
+    public static StreamCodec<FriendlyByteBuf, AverageCountCostFunction> packetCodec(StreamCodec<FriendlyByteBuf, CostFunction> delegateCodec) {
+        return StreamCodec.composite(delegateCodec, AverageCountCostFunction::function, AverageCountCostFunction::new);
     }
 
     @Override

@@ -19,13 +19,13 @@
 
 package de.mschae23.grindenchantments.cost;
 
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.registry.RegistryWrapper;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import de.mschae23.grindenchantments.config.FilterConfig;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 public record FilterCostFunction(CostFunction function) implements CostFunction {
     public static final MapCodec<FilterCostFunction> TYPE_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -34,17 +34,17 @@ public record FilterCostFunction(CostFunction function) implements CostFunction 
     public static final CostFunctionType.Impl<FilterCostFunction> TYPE = new CostFunctionType.Impl<>(TYPE_CODEC, FilterCostFunction::packetCodec);
 
     @Override
-    public double getCost(ItemEnchantmentsComponent enchantments, FilterConfig filter, RegistryWrapper.WrapperLookup wrapperLookup) {
+    public double getCost(ItemEnchantments enchantments, FilterConfig filter, HolderLookup.Provider wrapperLookup) {
         return this.function.getCost(filter.filter(enchantments), filter, wrapperLookup);
     }
 
     @Override
     public CostFunctionType<?> getType() {
-        return CostFunctionType.FILTER;
+        return CostFunctionType.FILTER.get();
     }
 
-    public static PacketCodec<PacketByteBuf, FilterCostFunction> packetCodec(PacketCodec<PacketByteBuf, CostFunction> delegateCodec) {
-        return PacketCodec.tuple(delegateCodec, FilterCostFunction::function, FilterCostFunction::new);
+    public static StreamCodec<FriendlyByteBuf, FilterCostFunction> packetCodec(StreamCodec<FriendlyByteBuf, CostFunction> delegateCodec) {
+        return StreamCodec.composite(delegateCodec, FilterCostFunction::function, FilterCostFunction::new);
     }
 
     @Override
