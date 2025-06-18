@@ -112,9 +112,7 @@ public abstract class GrindstoneScreenHandlerMixin extends AbstractContainerMenu
 
     @Mixin(targets = "net/minecraft/world/inventory/GrindstoneMenu$4")
     public static abstract class Anonymous4Mixin extends Slot {
-        @Final
-        @Shadow
-        ContainerLevelAccess val$access;
+
         @Shadow
         @Final
         GrindstoneMenu this$0;
@@ -137,7 +135,7 @@ public abstract class GrindstoneScreenHandlerMixin extends AbstractContainerMenu
             }
 
             if (success) {
-                this.val$access.execute((world, pos) -> world.levelEvent(LevelEvent.SOUND_GRINDSTONE_USED, pos, 0)); // Plays grindstone sound
+                this.this$0.access.execute((world, pos) -> world.levelEvent(LevelEvent.SOUND_GRINDSTONE_USED, pos, 0)); // Plays grindstone sound
                 ci.cancel();
             }
         }

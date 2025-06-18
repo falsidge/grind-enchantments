@@ -32,7 +32,10 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.bus.api.Event;
+import net.neoforged.fml.ModList;
 import org.jetbrains.annotations.NotNull;
+import io.github.fourmisain.taxfreelevels.TaxFreeLevels;
+
 public final class GrindstoneEvents {
     static Operation[] operations = {new DisenchantOperation(), new MoveOperation(),new ResetRepairCostOperation()};
     static Operation getOperation(ItemStack input1, ItemStack input2)
@@ -97,7 +100,13 @@ public final class GrindstoneEvents {
     }
     public static boolean applyLevelCost(int cost, Player player)
     {
+        if (ModList.get().isLoaded("taxfreelevels"))
+        {
+            TaxFreeLevels.applyFlattenedXpCost(player, cost);
+            return true;
+        }
         player.giveExperienceLevels(-cost);
+
         return true;
     }
 }

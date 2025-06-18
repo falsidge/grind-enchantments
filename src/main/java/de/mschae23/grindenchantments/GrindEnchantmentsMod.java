@@ -14,6 +14,7 @@ import net.minecraft.core.HolderLookup;
 import com.mojang.serialization.DynamicOps;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.network.event.RegisterConfigurationTasksEvent;
@@ -79,7 +80,10 @@ public class GrindEnchantmentsMod
         // Note that this is necessary if and only if we want *this* class (ExampleMod) to respond directly to events.
         // Do not add this line if there are no @SubscribeEvent-annotated functions in this class, like onServerStarting() below.
         NeoForge.EVENT_BUS.register(this);
-
+        if (ModList.get().isLoaded("taxfreelevels"))
+        {
+            LOGGER.info("Grindstone Enchantments and TaxFreelevels compatibility loaded");
+        }
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
     }
 
